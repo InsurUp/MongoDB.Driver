@@ -32,4 +32,5 @@ jobs:
         dotnet pack ${{ env.PROJECT_PATH }}
         --configuration Release
         --no-build
-        -p:PackageVersion=${{ steps.get_version.outputs.version }}
+        -p:PackageVersion=0.1.5
+#        -p:PackageVersion=${{ steps.get_version.outputs.version }}
