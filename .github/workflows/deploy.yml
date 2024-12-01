@@ -6,35 +6,39 @@ on:
       - 'v*'
 
 env:
-  PROJECT_PATH: 'src/MongoDB.Driver/MongoDB.Driver.csproj'
+  BSON_PROJECT_PATH: 'src/MongoDB.Bson/MongoDB.Bson.csproj'
+  DRIVER_PROJECT_PATH: 'src/MongoDB.Driver/MongoDB.Driver.csproj'
 
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0    # Required to get the commit hash
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
 
-    - name: Get version from tag
-      id: get_version
-      run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      - name: Get version from tag
+        id: get_version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
-    - name: Restore dependencies
-      run: dotnet restore ${{ env.PROJECT_PATH }}
+      - name: Restore dependencies
+        run: |
+          dotnet restore ${{ env.BSON_PROJECT_PATH }}
+          dotnet restore ${{ env.DRIVER_PROJECT_PATH }}
 
-    - name: Build
-      run: dotnet build ${{ env.PROJECT_PATH }} --configuration Release --no-restore
+      - name: Build
+        run: |
+          dotnet build ${{ env.BSON_PROJECT_PATH }} --configuration Release --no-restore
+          dotnet build ${{ env.DRIVER_PROJECT_PATH }} --configuration Release --no-restore
 
-    - name: Pack
-      run: >
-        dotnet pack ${{ env.PROJECT_PATH }}
-        --configuration Release
-        --no-build
-        -p:PackageVersion=${{ steps.get_version.outputs.version }}
+      - name: Pack
+        run: |
+          dotnet pack ${{ env.BSON_PROJECT_PATH }} --configuration Release --no-build -p:PackageVersion=${{ steps.get_version.outputs.version }}
+          dotnet pack ${{ env.DRIVER_PROJECT_PATH }} --configuration Release --no-build -p:PackageVersion=${{ steps.get_version.outputs.version }}
 
-    - name: Push to NuGet
-      run: dotnet nuget push **/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+      - name: Push to NuGet
+        run: |
+          dotnet nuget push **/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
