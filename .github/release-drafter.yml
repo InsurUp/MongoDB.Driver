@@ -1,0 +1,58 @@
+name-template: 'v$RESOLVED_VERSION'
+tag-template: 'v$RESOLVED_VERSION'
+
+template: |
+  ## What's Changed
+  $CHANGES
+
+  ## 👥 Contributors
+  $CONTRIBUTORS
+
+  **Full Changelog**: https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION
+
+version-resolver:
+  major:
+    labels:
+      - 'breaking'
+      - 'major'
+  minor:
+    labels:
+      - 'feature'
+      - 'enhancement'
+      - 'new'
+      - 'minor'
+  patch:
+    labels:
+      - 'bug'
+      - 'bugfix'
+      - 'fix'
+      - 'patch'
+  default: patch
+
+categories:
+  - title: '💥 Breaking'
+    labels:
+      - 'breaking'
+  - title: '🚀 New'
+    labels:
+      - 'feature'
+      - 'enhancement'
+      - 'new'
+  - title: '🐛 Fixes'
+    labels:
+      - 'bug'
+      - 'bugfix'
+      - 'fix'
+  - title: '📝 Docs'
+    labels:
+      - 'docs'
+      - 'documentation'
+  - title: '🔧 Maintenance'
+    labels:
+      - 'chore'
+      - 'maintenance'
+
+exclude-labels:
+  - 'skip-changelog'
+
+change-template: '- $TITLE @$AUTHOR (#$NUMBER)'

@@ -1,0 +1,38 @@
+name: Build
+
+on:
+  workflow_dispatch:
+
+env:
+  PROJECT_PATH: 'src/MongoDB.Driver/MongoDB.Driver.csproj'
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0    # Required to get the commit hash
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+
+    - name: Get version from tag
+      id: get_version
+      run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+    - name: Restore dependencies
+      run: dotnet restore ${{ env.PROJECT_PATH }}
+
+    - name: Build
+      run: dotnet build ${{ env.PROJECT_PATH }} --configuration Release --no-restore
+
+    - name: Run tests
+      run: dotnet test --no-restore --verbosity normal
+
+    - name: Pack
+      run: >
+        dotnet pack ${{ env.PROJECT_PATH }}
+        --configuration Release
+        --no-build
+        -p:PackageVersion=${{ steps.get_version.outputs.version }}
