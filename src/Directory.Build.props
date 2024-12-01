@@ -11,14 +11,13 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <Company>MongoDB Inc.</Company>
-    <Copyright>Copyright © 2010-present MongoDB Inc.</Copyright>
-    <Authors>MongoDB Inc.</Authors>
+    <Company>InsurUp</Company>
+    <Copyright>Original work Copyright © 2010-present MongoDB Inc. Modified work Copyright © 2024 InsurUp</Copyright>
+    <Authors>InsurUp</Authors>
     <PackageIcon>packageIcon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>https://github.com/mongodb/mongo-csharp-driver/releases/tag/v$(Version)</PackageReleaseNotes>
     <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
-    <PackageProjectUrl>https://www.mongodb.com/docs/drivers/csharp/</PackageProjectUrl>
+    <PackageProjectUrl>https://github.com/InsurUp/MongoFlow.MongoDB.Driver</PackageProjectUrl>
     <PackageTags>mongodb;mongo;nosql</PackageTags>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <PackageLanguage>en-US</PackageLanguage>

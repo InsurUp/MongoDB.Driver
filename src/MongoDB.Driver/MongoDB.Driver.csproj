@@ -5,11 +5,10 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <AssemblyTitle>MongoDB.Driver</AssemblyTitle>
-    <Product>MongoDB.Driver</Product>
-    <PackageId>MongoDB.Driver</PackageId>
-    <Description>Official MongoDB supported driver for MongoDB. See https://www.mongodb.com/docs/drivers/csharp/ for more details.</Description>
-    <PackageDescription>Official .NET driver for MongoDB.</PackageDescription>
+    <AssemblyTitle>MongoFlow.MongoDB.Driver</AssemblyTitle>
+    <Product>MongoFlow.MongoDB.Driver</Product>
+    <PackageId>MongoFlow.MongoDB.Driver</PackageId>
+    <Description>Fork of the official C# .NET driver for MongoDB.</Description>
     <IsPackable>true</IsPackable>
   </PropertyGroup>
 
