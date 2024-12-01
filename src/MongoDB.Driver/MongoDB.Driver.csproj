@@ -33,7 +33,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\MongoDB.Bson\MongoDB.Bson.csproj" />
+    <ProjectReference Include="..\MongoDB.Bson\MongoDB.Bson.csproj">
+      <Name>MongoFlow.MongoDB.Bson</Name>
+    </ProjectReference>
   </ItemGroup>
 
   <PropertyGroup>

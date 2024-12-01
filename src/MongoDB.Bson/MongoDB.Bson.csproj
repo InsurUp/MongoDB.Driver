@@ -5,11 +5,10 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <AssemblyTitle>MongoDB.Bson</AssemblyTitle>
-    <Product>MongoDB.Bson</Product>
-    <PackageId>MongoDB.Bson</PackageId>
-    <Description>Official MongoDB supported BSON library. See https://www.mongodb.com/docs/drivers/csharp/ for more details.</Description>
-    <PackageDescription>MongoDB's Official Bson Library.</PackageDescription>
+    <AssemblyTitle>MongoFlow.MongoDB.Bson</AssemblyTitle>
+    <Product>MongoFlow.MongoDB.Bson</Product>
+    <PackageId>MongoFlow.MongoDB.Bson</PackageId>
+    <Description>Fork of official MongoDB supported BSON library.</Description>
     <PackageTags>$(PackageTags);bson</PackageTags>
     <IsPackable>true</IsPackable>
   </PropertyGroup>
