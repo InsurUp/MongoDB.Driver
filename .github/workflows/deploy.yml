@@ -9,6 +9,10 @@ env:
   BSON_PROJECT_PATH: 'src/MongoDB.Bson/MongoDB.Bson.csproj'
   DRIVER_PROJECT_PATH: 'src/MongoDB.Driver/MongoDB.Driver.csproj'
 
+permissions:
+  packages: write
+  contents: read
+
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
@@ -31,8 +35,8 @@ jobs:
 
       - name: Build
         run: |
-          dotnet build ${{ env.BSON_PROJECT_PATH }} --configuration Release --no-restore
-          dotnet build ${{ env.DRIVER_PROJECT_PATH }} --configuration Release --no-restore
+          dotnet build ${{ env.BSON_PROJECT_PATH }} --configuration Release --no-restore -p:Version=${{ steps.get_version.outputs.version }} -p:AssemblyVersion=${{ steps.get_version.outputs.version }} -p:FileVersion=${{ steps.get_version.outputs.version }}
+          dotnet build ${{ env.DRIVER_PROJECT_PATH }} --configuration Release --no-restore -p:Version=${{ steps.get_version.outputs.version }} -p:AssemblyVersion=${{ steps.get_version.outputs.version }} -p:FileVersion=${{ steps.get_version.outputs.version }}
 
       - name: Pack
         run: |
@@ -41,4 +45,4 @@ jobs:
 
       - name: Push to NuGet
         run: |
-          dotnet nuget push **/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+          dotnet nuget push **/*.nupkg --api-key ${{ secrets.GITHUB_TOKEN }} --source https://nuget.pkg.github.com/InsurUp/index.json --skip-duplicate
