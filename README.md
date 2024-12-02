@@ -1,13 +1,12 @@
-﻿# MongoFlow.MongoDB.Driver
+﻿# MongoDB C# Driver
 
 [![License: MIT](https://img.shields.io/badge/License-Apache2.0-yellow.svg)](https://opensource.org/license/apache-2-0)
 [![.NET C#](https://img.shields.io/badge/.NET-C%23-blue)](https://docs.microsoft.com/en-us/dotnet/csharp/)
-[![NuGet](https://img.shields.io/nuget/v/MongoFlow.MongoDB.Driver)](https://www.nuget.org/packages/MongoFlow.MongoDB.Driver)
 
 > [!WARNING]
 > This package is not ready for production use. It is still in development and should not be used in a production environment.
 >
-> We welcome your feedback! You can reach us by [opening a GitHub issue](https://github.com/InsurUp/MongoFlow.MongoDB.Driver/issues).
+> We welcome your feedback! You can reach us by [opening a GitHub issue](https://github.com/InsurUp/MongoDB.Driver/issues).
 
 This is a fork of the official [MongoDB C# Driver](https://github.com/mongodb/mongo-csharp-driver).
 
@@ -24,9 +23,3 @@ Modified work Copyright © 2024 InsurUp
 
 ## Important Notice
 This is not the official MongoDB driver. For the official driver, please visit [MongoDB C# Driver](https://github.com/mongodb/mongo-csharp-driver).
-
-## Installation
-Available on NuGet:
-```bash
-dotnet add package MongoFlow.MongoDB.Driver
-```
