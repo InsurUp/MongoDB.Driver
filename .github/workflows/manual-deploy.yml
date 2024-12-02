@@ -34,13 +34,13 @@ jobs:
 
       - name: Build
         run: |
-          dotnet build ${{ env.BSON_PROJECT_PATH }} --configuration Release --no-restore
-          dotnet build ${{ env.DRIVER_PROJECT_PATH }} --configuration Release --no-restore
+          dotnet build ${{ env.BSON_PROJECT_PATH }} --configuration Release --no-restore -p:Version=${{ inputs.version }} -p:AssemblyVersion=${{ inputs.version }} -p:FileVersion=${{ inputs.version }}
+          dotnet build ${{ env.DRIVER_PROJECT_PATH }} --configuration Release --no-restore -p:Version=${{ inputs.version }} -p:AssemblyVersion=${{ inputs.version }} -p:FileVersion=${{ inputs.version }}
 
       - name: Pack
         run: |
-          dotnet pack ${{ env.BSON_PROJECT_PATH }} --configuration Release --no-build -p:PackageVersion=${{ inputs.version }} -p:Version=${{ inputs.version }} -p:AssemblyVersion=${{ inputs.version }} -p:FileVersion=${{ inputs.version }}
-          dotnet pack ${{ env.DRIVER_PROJECT_PATH }} --configuration Release --no-build -p:PackageVersion=${{ inputs.version }} -p:Version=${{ inputs.version }} -p:AssemblyVersion=${{ inputs.version }} -p:FileVersion=${{ inputs.version }}
+          dotnet pack ${{ env.BSON_PROJECT_PATH }} --configuration Release --no-build -p:PackageVersion=${{ inputs.version }}
+          dotnet pack ${{ env.DRIVER_PROJECT_PATH }} --configuration Release --no-build -p:PackageVersion=${{ inputs.version }}
 
       - name: Push to NuGet
         run: |
