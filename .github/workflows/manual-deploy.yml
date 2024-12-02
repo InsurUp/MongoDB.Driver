@@ -40,7 +40,7 @@ jobs:
       - name: Pack
         run: |
           dotnet pack ${{ env.BSON_PROJECT_PATH }} --configuration Release --no-build -p:PackageVersion=${{ inputs.version }}
-          dotnet pack ${{ env.DRIVER_PROJECT_PATH }} --configuration Release --no-build -p:PackageVersion=${{ inputs.version }}
+          dotnet pack ${{ env.DRIVER_PROJECT_PATH }} --configuration Release --no-build -p:PackageVersion=${{ inputs.version }} -p:Version=${{ inputs.version }} -p:AssemblyVersion=${{ inputs.version }} -p:FileVersion=${{ inputs.version }}
 
       - name: Push to NuGet
         run: |
