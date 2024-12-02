@@ -5,9 +5,9 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <AssemblyTitle>MongoFlow.MongoDB.Bson</AssemblyTitle>
-    <Product>MongoFlow.MongoDB.Bson</Product>
-    <PackageId>MongoFlow.MongoDB.Bson</PackageId>
+    <AssemblyTitle>MongoDB.Bson</AssemblyTitle>
+    <Product>MongoDB.Bson</Product>
+    <PackageId>MongoDB.Bson</PackageId>
     <Description>Fork of official MongoDB supported BSON library.</Description>
     <PackageTags>$(PackageTags);bson</PackageTags>
     <IsPackable>true</IsPackable>
