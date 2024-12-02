@@ -5,8 +5,8 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <AssemblyTitle>MongoFlow.MongoDB.Driver</AssemblyTitle>
-    <Product>MongoFlow.MongoDB.Driver</Product>
+    <AssemblyTitle>MongoDB.Driver</AssemblyTitle>
+    <Product>MongoDB.Driver</Product>
     <PackageId>MongoFlow.MongoDB.Driver</PackageId>
     <Description>Fork of the official C# .NET driver for MongoDB.</Description>
     <IsPackable>true</IsPackable>
