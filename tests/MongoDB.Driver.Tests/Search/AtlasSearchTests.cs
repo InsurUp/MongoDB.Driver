@@ -23,7 +23,6 @@ using MongoDB.Driver.Core.Misc;
 using MongoDB.Driver.Core.TestHelpers.Logging;
 using MongoDB.Driver.GeoJsonObjectModel;
 using MongoDB.Driver.Search;
-using MongoDB.Driver.TestHelpers;
 using MongoDB.TestHelpers.XunitExtensions;
 using Xunit;
 using Xunit.Abstractions;
@@ -133,6 +132,57 @@ namespace MongoDB.Driver.Tests.Search
         }
 
         [Fact]
+        public void EqualsGuid()
+        {
+            var testGuid = Guid.Parse("b52af144-bc97-454f-a578-418a64fa95bf");
+
+            var result = GetExtraTestsCollection().Aggregate()
+                .Search(Builders<TestClass>.Search.Equals(c => c.TestGuid,  testGuid))
+                .Single();
+
+            result.Name.Should().Be("test6");
+        }
+
+        [Fact]
+        public void EqualsNull()
+        {
+            var result = GetExtraTestsCollection().Aggregate()
+                .Search(Builders<TestClass>.Search.Equals(c => c.TestString,  null))
+                .Single();
+
+            result.Name.Should().Be("testNull");
+        }
+        
+        [Fact]
+        public void EqualsArrayField()
+        {
+            var results = GetSynonymTestCollection().Aggregate()
+                .Search(Builders<Movie>.Search.Equals(p => p.Genres, "family"))
+                .Limit(3)
+                .ToList();
+            
+            results.Should().HaveCount(3);
+            foreach (var result in results)
+            {
+                result.Genres.Should().Contain("Family");
+            }
+            
+            results[0].Title.Should().Be("The Poor Little Rich Girl");
+            results[1].Title.Should().Be("Robin Hood");
+            results[2].Title.Should().Be("Peter Pan");
+        }
+        
+        [Fact]
+        public void EqualsStringField()
+        {
+            var results = GetSynonymTestCollection().Aggregate()
+                .Search(Builders<Movie>.Search.Equals(p => p.Title, "a corner in wheat"))
+                .ToList();
+            
+            results.Should().ContainSingle().Which.Title.Should().Be("A Corner in Wheat");
+        }
+
+        [Fact]
         public void Exists()
         {
             var result = SearchSingle(
@@ -236,6 +286,23 @@ namespace MongoDB.Driver.Tests.Search
             results.Count.Should().Be(2);
             results[0].Runtime.Should().Be(231);
             results[1].Runtime.Should().Be(31);
+        }
+
+        [Fact]
+        public void InGuid()
+        {
+            var testGuids = new[]
+            {
+                Guid.Parse("b52af144-bc97-454f-a578-418a64fa95bf"), Guid.Parse("84da5d44-bc97-454f-a578-418a64fa937a")
+            };
+
+            var result = GetExtraTestsCollection().Aggregate()
+                .Search(Builders<TestClass>.Search.In(c => c.TestGuid,  testGuids))
+                .Limit(10)
+                .ToList();
+
+            result.Should().HaveCount(2);
+            result.Select(s => s.Name).Should().BeEquivalentTo(["test6", "test7"]);
         }
 
         [Fact]
@@ -739,6 +806,10 @@ namespace MongoDB.Driver.Tests.Search
             .GetDatabase("sample_mflix")
             .GetCollection<EmbeddedMovie>("embedded_movies");
 
+        private IMongoCollection<TestClass> GetExtraTestsCollection() => _mongoClient
+            .GetDatabase("csharpExtraTests")
+            .GetCollection<TestClass>("testClasses");
+
         [BsonIgnoreExtraElements]
         public class Comment
         {
@@ -749,6 +820,9 @@ namespace MongoDB.Driver.Tests.Search
         [BsonIgnoreExtraElements]
         public class Movie
         {
+            [BsonElement("genres")]
+            public string[] Genres { get; set; }
+            
             [BsonElement("title")]
             public string Title { get; set; }
 
@@ -849,6 +923,23 @@ namespace MongoDB.Driver.Tests.Search
 
             [BsonElement("score")]
             public double Score { get; set; }
+        }
+
+        [BsonIgnoreExtraElements]
+        private class TestClass
+        {
+            [BsonId]
+            public ObjectId Id { get; set; }
+
+            [BsonElement("name")]
+            public string Name { get; set; }
+
+            [BsonElement("testString")]
+            public string TestString { get; set; }
+
+            [BsonGuidRepresentation(GuidRepresentation.Standard)]
+            [BsonElement("testGuid")]
+            public Guid TestGuid { get; set; }
         }
     }
 }
