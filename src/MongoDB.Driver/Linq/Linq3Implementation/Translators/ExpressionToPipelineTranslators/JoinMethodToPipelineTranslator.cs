@@ -86,7 +86,7 @@ namespace MongoDB.Driver.Linq.Linq3Implementation.Translators.ExpressionToPipeli
                         localField,
                         foreignField,
                         Array.Empty<AstComputedField>(),
-                        lookupPipeline,
+                        lookupPipeline.Ast,
                         @as: "_inner");
                 }
 
