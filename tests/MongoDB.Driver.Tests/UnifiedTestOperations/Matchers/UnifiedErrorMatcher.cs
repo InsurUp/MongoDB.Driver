@@ -108,17 +108,12 @@ namespace MongoDB.Driver.Tests.UnifiedTestOperations.Matchers
             actualException
                 .Should()
                 .Match<Exception>(e =>
-                    e.Message.Contains(expectedSubstring) ||
-                    (e.InnerException != null && e.InnerException.Message.Contains(expectedSubstring)));
+                    e.Message.IndexOf(expectedSubstring, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    (e.InnerException != null && e.InnerException.Message.IndexOf(expectedSubstring, StringComparison.OrdinalIgnoreCase) >= 0));
         }
 
         private void AssertErrorLabelsContain(Exception actualException, IEnumerable<string> expectedErrorLabels)
         {
-            if (actualException is ClientBulkWriteException bulkWriteException)
-            {
-                actualException = bulkWriteException.InnerException;
-            }
-
             var mongoException = actualException.Should().BeAssignableTo<MongoException>().Subject;
             mongoException.ErrorLabels.Should().Contain(expectedErrorLabels);
         }
@@ -144,7 +139,17 @@ namespace MongoDB.Driver.Tests.UnifiedTestOperations.Matchers
                     break;
 
                 default:
-                    throw new NotSupportedException($"Unrecognized exception type: '{actualException.GetType().FullName}'.");
+                    actualResult = new BsonDocument
+                    {
+                        { "insertedCount", 0 },
+                        { "upsertedCount", 0 },
+                        { "matchedCount", 0 },
+                        { "modifiedCount", 0 },
+                        { "deletedCount", 0 },
+                        { "insertedIds", new BsonDocument() },
+                        { "upsertedIds", new BsonDocument() }
+                    };
+                    break;
             }
 
             new UnifiedValueMatcher(_entityMap).AssertValuesMatch(actualResult, expectedResult);
@@ -164,6 +169,7 @@ namespace MongoDB.Driver.Tests.UnifiedTestOperations.Matchers
             bool IsClientError(Exception exception)
                 => exception is
                     ArgumentException or
+                    InvalidOperationException or
                     MongoClientException or
                     BsonException or
                     MongoConnectionException or

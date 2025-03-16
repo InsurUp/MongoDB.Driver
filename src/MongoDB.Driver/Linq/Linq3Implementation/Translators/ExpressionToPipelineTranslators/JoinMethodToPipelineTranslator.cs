@@ -30,7 +30,7 @@ namespace MongoDB.Driver.Linq.Linq3Implementation.Translators.ExpressionToPipeli
     internal static class JoinMethodToPipelineTranslator
     {
         // public static methods
-        public static AstPipeline Translate(TranslationContext context, MethodCallExpression expression)
+        public static TranslatedPipeline Translate(TranslationContext context, MethodCallExpression expression)
         {
             var method = expression.Method;
             var arguments = expression.Arguments;
@@ -103,11 +103,11 @@ namespace MongoDB.Driver.Linq.Linq3Implementation.Translators.ExpressionToPipeli
                 var (projectStage, projectSerializer) = ProjectionHelper.CreateProjectStage(resultSelectorTranslation);
 
                 pipeline = pipeline.AddStages(
-                    projectSerializer,
                     wrapOuterStage,
                     lookupStage,
                     unwindStage,
-                    projectStage);
+                    projectStage,
+                    projectSerializer);
 
                 return pipeline;
             }
