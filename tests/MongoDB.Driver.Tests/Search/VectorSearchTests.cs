@@ -28,6 +28,7 @@ using Xunit.Abstractions;
 namespace MongoDB.Driver.Tests.Search
 {
     [Trait("Category", "AtlasSearch")]
+    [Trait("Category", "Integration")]
     public class VectorSearchTests : LoggableTestClass
     {
         private readonly IMongoClient _mongoClient;
@@ -36,13 +37,13 @@ namespace MongoDB.Driver.Tests.Search
         {
             RequireEnvironment.Check().EnvironmentVariable("ATLAS_SEARCH_TESTS_ENABLED");
 
-            var atlasSearchUri = Environment.GetEnvironmentVariable("ATLAS_SEARCH");
+            var atlasSearchUri = Environment.GetEnvironmentVariable("ATLAS_SEARCH_URI");
             Ensure.IsNotNullOrEmpty(atlasSearchUri, nameof(atlasSearchUri));
 
             var mongoClientSettings = MongoClientSettings.FromConnectionString(atlasSearchUri);
             mongoClientSettings.ClusterSource = DisposingClusterSource.Instance;
 
-            _mongoClient = new MongoClient(atlasSearchUri);
+            _mongoClient = new MongoClient(mongoClientSettings);
         }
 
         protected override void DisposeInternal() => _mongoClient.Dispose();

@@ -36,36 +36,58 @@ namespace MongoDB.Driver.Tests.UnifiedTestOperations
             _options = options;
         }
 
-        public void Execute(Action<BsonDocument, bool, CancellationToken> assertOperationCallback, CancellationToken cancellationToken)
+        public OperationResult Execute(Func<BsonDocument, bool, CancellationToken, OperationResult> assertOperationCallback, CancellationToken cancellationToken)
         {
-            _session.WithTransaction(
-                callback: (session, token) =>
-                {
-                    foreach (var operationItem in _operations)
+            try
+            {
+                return _session.WithTransaction(
+                    callback: (session, token) =>
                     {
-                        assertOperationCallback(operationItem.AsBsonDocument, false, token);
-                    }
+                        foreach (var operationItem in _operations)
+                        {
+                            var operationResult = assertOperationCallback(operationItem.AsBsonDocument, false, token);
+                            if (operationResult.Exception != null)
+                            {
+                                throw operationResult.Exception;
+                            }
+                        }
 
-                    return (object)null;
-                },
-                transactionOptions: _options,
-                cancellationToken: cancellationToken);
+                        return OperationResult.Empty();
+                    },
+                    transactionOptions: _options,
+                    cancellationToken: cancellationToken);
+            }
+            catch (Exception exception)
+            {
+                return OperationResult.FromException(exception);
+            }
         }
 
-        public async Task ExecuteAsync(Action<BsonDocument, bool, CancellationToken> assertOperationCallback, CancellationToken cancellationToken)
+        public async Task<OperationResult> ExecuteAsync(Func<BsonDocument, bool, CancellationToken, OperationResult> assertOperationCallback, CancellationToken cancellationToken)
         {
-            await _session.WithTransactionAsync(
-                callbackAsync: (session, token) =>
-                {
-                    foreach (var operationItem in _operations)
+            try
+            {
+                return await _session.WithTransactionAsync(
+                    callbackAsync: (session, token) =>
                     {
-                        assertOperationCallback(operationItem.AsBsonDocument, true, token);
-                    }
+                        foreach (var operationItem in _operations)
+                        {
+                            var operationResult = assertOperationCallback(operationItem.AsBsonDocument, true, token);
+                            if (operationResult.Exception != null)
+                            {
+                                throw operationResult.Exception;
+                            }
+                        }
 
-                    return Task.FromResult<object>(null);
-                },
-                transactionOptions: _options,
-                cancellationToken: cancellationToken);
+                        return Task.FromResult(OperationResult.Empty());
+                    },
+                    transactionOptions: _options,
+                    cancellationToken: cancellationToken);
+            }
+            catch (Exception exception)
+            {
+                return OperationResult.FromException(exception);
+            }
         }
     }
 
@@ -83,7 +105,11 @@ namespace MongoDB.Driver.Tests.UnifiedTestOperations
             var session = _entityMap.Sessions[targetSessionId];
 
             BsonArray operations = null;
-            TransactionOptions options = null;
+            TimeSpan? maxCommitTime = null;
+            ReadConcern readConcern = null;
+            ReadPreference readPreference = null;
+            TimeSpan? timeout = null;
+            WriteConcern writeConcern = null;
 
             foreach (var argument in arguments)
             {
@@ -92,21 +118,30 @@ namespace MongoDB.Driver.Tests.UnifiedTestOperations
                     case "callback":
                         operations = argument.Value.AsBsonArray;
                         break;
+                    case "maxCommitTimeMS":
+                        maxCommitTime = TimeSpan.FromMilliseconds(argument.Value.AsInt32);
+                        break;
                     case "readConcern":
-                        options = options ?? new TransactionOptions();
-                        options = options.With(readConcern: ReadConcern.FromBsonDocument(argument.Value.AsBsonDocument));
+                        readConcern = ReadConcern.FromBsonDocument(argument.Value.AsBsonDocument);
                         break;
                     case "readPreference":
-                        options = options ?? new TransactionOptions();
-                        options = options.With(readPreference: ReadPreference.FromBsonDocument(argument.Value.AsBsonDocument));
+                        readPreference = ReadPreference.FromBsonDocument(argument.Value.AsBsonDocument);
+                        break;
+                    case "timeoutMS":
+                        timeout = UnifiedEntityMap.ParseTimeout(argument.Value);
                         break;
                     case "writeConcern":
-                        options = options ?? new TransactionOptions();
-                        options = options.With(writeConcern: UnifiedEntityMap.ParseWriteConcern(argument.Value.AsBsonDocument));
+                        writeConcern = UnifiedEntityMap.ParseWriteConcern(argument.Value.AsBsonDocument);
                         break;
                     default:
                         throw new FormatException($"Invalid WithTransactionOperation argument name: '{argument.Name}'.");
                 }
+            }
+
+            TransactionOptions options = null;
+            if (maxCommitTime.HasValue || readConcern != null || readPreference != null || timeout.HasValue || writeConcern != null)
+            {
+                options = new TransactionOptions(timeout, readConcern, readPreference, writeConcern, maxCommitTime);
             }
 
             return new UnifiedWithTransactionOperation(session, operations, options);

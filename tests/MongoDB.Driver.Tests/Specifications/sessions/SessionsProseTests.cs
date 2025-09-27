@@ -15,24 +15,27 @@
 
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Threading.Tasks;
 using FluentAssertions;
 using MongoDB.Bson;
 using MongoDB.Bson.TestHelpers;
 using MongoDB.Driver.Core;
+using MongoDB.Driver.Core.Clusters;
 using MongoDB.Driver.Core.Events;
 using MongoDB.Driver.Core.Misc;
 using MongoDB.Driver.Core.TestHelpers.Logging;
 using MongoDB.Driver.Core.TestHelpers.XunitExtensions;
 using MongoDB.Driver.Encryption;
+using MongoDB.Driver.TestHelpers;
 using MongoDB.TestHelpers.XunitExtensions;
 using Xunit;
 using Xunit.Abstractions;
 
 namespace MongoDB.Driver.Tests.Specifications.sessions
 {
-    [Trait("Category", "Serverless")]
+    [Trait("Category", "Integration")]
     public class SessionsProseTests : LoggableTestClass
     {
         public SessionsProseTests(ITestOutputHelper output) : base(output)
@@ -61,6 +64,7 @@ namespace MongoDB.Driver.Tests.Specifications.sessions
         public async Task Ensure_explicit_session_raises_error_if_connection_does_not_support_sessions([Values(true, false)] bool async)
         {
             RequireServer.Check().Supports(Feature.ClientSideEncryption);
+            CoreTestConfiguration.SkipMongocryptdTests_SERVER_106469();
 
             using var mongocryptdContext = GetMongocryptdContext();
             using var session = mongocryptdContext.MongoClient.StartSession();
@@ -68,8 +72,9 @@ namespace MongoDB.Driver.Tests.Specifications.sessions
             var exception = async ?
                 await Record.ExceptionAsync(() => mongocryptdContext.MongocryptdCollection.FindAsync(session, FilterDefinition<BsonDocument>.Empty)) :
                 Record.Exception(() => mongocryptdContext.MongocryptdCollection.Find(session, FilterDefinition<BsonDocument>.Empty).ToList());
-            exception.Should().BeOfType<MongoClientException>().Subject.Message.Should().Be("Sessions are not supported.");
 
+
+            exception.Should().BeOfType<MongoClientException>().Subject.Message.Should().Be("Sessions are not supported.");
             exception = async ?
                 await Record.ExceptionAsync(() => mongocryptdContext.MongocryptdCollection.InsertOneAsync(session, new BsonDocument())) :
                 Record.Exception(() => mongocryptdContext.MongocryptdCollection.InsertOne(session, new BsonDocument()));
@@ -82,6 +87,7 @@ namespace MongoDB.Driver.Tests.Specifications.sessions
         public async Task Ensure_implicit_session_is_ignored_if_connection_does_not_support_sessions([Values(true, false)] bool async)
         {
             RequireServer.Check().Supports(Feature.ClientSideEncryption);
+            CoreTestConfiguration.SkipMongocryptdTests_SERVER_106469();
 
             using var mongocryptdContext = GetMongocryptdContext();
 
@@ -300,6 +306,55 @@ namespace MongoDB.Driver.Tests.Specifications.sessions
 
             collection.InsertOne(new BsonDocument("x", 1));
             await eventsTask.WithTimeout(1000);
+        }
+
+        // https://specifications.readthedocs.io/en/latest/sessions/tests/#20-drivers-do-not-gossip-clustertime-on-sdam-commands
+        [Fact]
+        public void Ensure_cluster_times_are_not_gossiped_on_SDAM_commands()
+        {
+            RequireServer.Check().ClusterTypes(ClusterType.ReplicaSet, ClusterType.Sharded);
+
+            var eventCapturer = new EventCapturer()
+                .Capture<ServerHeartbeatStartedEvent>()
+                .Capture<ServerHeartbeatSucceededEvent>()
+                .Capture<CommandStartedEvent>();
+
+            using var c1 = DriverTestConfiguration.CreateMongoClient(
+                settings =>
+                {
+                    settings.ClusterConfigurator = c => c.Subscribe(eventCapturer);
+                    settings.DirectConnection = true;
+                    settings.HeartbeatInterval = TimeSpan.FromMilliseconds(10);
+                    if (settings.Servers.Count() > 1)
+                    {
+                        settings.Servers = settings.Servers.Take(1);
+                    }
+                });
+
+            var pingCommand = new BsonDocument("ping", 1);
+            var pingResult = c1.GetDatabase("admin").RunCommand<BsonDocument>(pingCommand);
+
+            var clusterTime = pingResult["$clusterTime"];
+
+            var c2 = DriverTestConfiguration.Client;
+            c2.GetDatabase("test").GetCollection<BsonDocument>("test").InsertOne(new BsonDocument("advance", "$clusterTime"));
+
+            eventCapturer.Clear();
+
+            eventCapturer.WaitForOrThrowIfTimeout(
+                capturedEvents =>
+                {
+                    return capturedEvents
+                        .SkipWhile(e => e is not ServerHeartbeatStartedEvent)
+                        .Any(e => e is ServerHeartbeatSucceededEvent);
+                }, TimeSpan.FromSeconds(1), "Didn't get any server heartbeat pairs");
+
+            c1.GetDatabase("admin").RunCommand<BsonDocument>(pingCommand);
+
+            var commandStartedEvents = eventCapturer.Events.OfType<CommandStartedEvent>().ToArray();
+            commandStartedEvents.Length.Should().Be(1);
+            commandStartedEvents[0].CommandName.Should().Be("ping");
+            commandStartedEvents[0].Command["$clusterTime"].Should().Be(clusterTime);
         }
 
         private sealed class MongocryptdContext : IDisposable

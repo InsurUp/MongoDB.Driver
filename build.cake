@@ -117,12 +117,6 @@ Task("Test")
         items: GetFiles("./**/*.Tests.csproj").Where(name => !name.ToString().Contains("Atlas")),
         action: (BuildConfig buildConfig, Path testProject) =>
     {
-        if (Environment.GetEnvironmentVariable("MONGODB_API_VERSION") != null &&
-            testProject.ToString().Contains("Legacy"))
-        {
-            return; // Legacy tests are exempt from Version API testing
-        }
-
         var mongoX509ClientCertificatePath = Environment.GetEnvironmentVariable("MONGO_X509_CLIENT_CERTIFICATE_PATH");
         if (mongoX509ClientCertificatePath != null)
         {
@@ -134,7 +128,7 @@ Task("Test")
             Console.WriteLine($"MONGO_X509_CLIENT_CERTIFICATE_PASSWORD={mongoX509ClientCertificatePassword}");
         }
 
-        RunTests(buildConfig, testProject);
+        RunTests(buildConfig, testProject, filter: "Category=\"Integration\"");
     })
     .DeferOnError();
 
@@ -161,13 +155,6 @@ Task("TestAtlasConnectivity")
     .DoesForEach(
         items: GetFiles("./**/AtlasConnectivity.Tests.csproj"),
         action: (BuildConfig buildConfig, Path testProject) => RunTests(buildConfig, testProject));
-
-Task("TestAtlasDataLake")
-    .IsDependentOn("Build")
-    .DoesForEach(
-        items: GetFiles("./**/MongoDB.Driver.Tests.csproj"),
-        action: (BuildConfig buildConfig, Path testProject) =>
-           RunTests(buildConfig, testProject, filter: "Category=\"AtlasDataLake\""));
 
 Task("TestAtlasSearch")
     .IsDependentOn("Build")
@@ -208,17 +195,6 @@ Task("TestMongoDbOidc")
         action: (BuildConfig buildConfig, Path testProject) =>
             RunTests(buildConfig, testProject, filter: "Category=\"MongoDbOidc\""));
 
-Task("TestServerless")
-    .IsDependentOn("Build")
-    .DoesForEach(
-        items: GetFiles("./**/MongoDB.Driver.Tests.csproj"),
-        action: (BuildConfig buildConfig, Path testProject) =>
-            RunTests(buildConfig, testProject, filter: "Category=\"Serverless\""));
-
-Task("TestServerlessNet472").IsDependentOn("TestServerless");
-Task("TestServerlessNetStandard21").IsDependentOn("TestServerless");
-Task("TestServerlessNet60").IsDependentOn("TestServerless");
-
 Task("TestLibMongoCrypt")
     .IsDependentOn("Build")
     .DoesForEach(
@@ -234,6 +210,10 @@ Task("TestLoadBalanced")
 
 Task("TestLoadBalancedNetStandard21").IsDependentOn("TestLoadBalanced");
 Task("TestLoadBalancedNet60").IsDependentOn("TestLoadBalanced");
+
+Task("TestSocks5ProxyNet472").IsDependentOn("TestSocks5Proxy");
+Task("TestSocks5ProxyNetStandard21").IsDependentOn("TestSocks5Proxy");
+Task("TestSocks5ProxyNet60").IsDependentOn("TestSocks5Proxy");
 
 Task("TestCsfleWithMockedKms")
     .IsDependentOn("TestLibMongoCrypt")
@@ -270,6 +250,22 @@ Task("TestCsfleWithGcpKms")
         items: GetFiles("./**/*.Tests.csproj"),
         action: (BuildConfig buildConfig, Path testProject) =>
             RunTests(buildConfig, testProject, filter: "Category=\"CsfleGCPKMS\""));
+
+Task("TestX509")
+    .IsDependentOn("Build")
+    .DoesForEach(
+        items: GetFiles("./**/MongoDB.Driver.Tests.csproj"),
+        action: (BuildConfig buildConfig, Path testProject) =>
+            RunTests(buildConfig, testProject, filter: "Category=\"X509\""));
+
+Task("TestX509Net60").IsDependentOn("TestX509");
+
+Task("TestSocks5Proxy")
+    .IsDependentOn("Build")
+    .DoesForEach(
+        items: GetFiles("./**/*.Tests.csproj"),
+        action: (BuildConfig buildConfig, Path testProject) =>
+            RunTests(buildConfig, testProject, filter: "Category=\"Socks5Proxy\""));
 
 Task("Package")
     .IsDependentOn("PackageNugetPackages");
@@ -397,10 +393,7 @@ Setup<BuildConfig>(
         };
 
         var lowerTarget = target.ToLowerInvariant();
-        // Apple M1 (arm64) must run on .NET 6 as the hosting process is arm64 and cannot load the previous netcoreapp2.1/3.1 runtimes.
-        // While Rosetta 2 can cross-compile x64->arm64 to run x64 code, it requires a completely separate install of the .NET runtimes
-        // in a different directory with a x64 dotnet host process. This would further complicate our testing for little additional gain.
-        var framework = targetPlatform == "arm64" ? "net6.0" : lowerTarget switch
+        var framework = lowerTarget switch
         {
             string s when s.EndsWith("netstandard21") || s.EndsWith("netcoreapp31") => "netcoreapp3.1",
             string s when s.EndsWith("net472") => "net472",

@@ -24,7 +24,6 @@ using MongoDB.Driver.Core.Bindings;
 using MongoDB.Driver.Core.Clusters;
 using MongoDB.Driver.Core.Configuration;
 using MongoDB.Driver.Core.Connections;
-using MongoDB.Driver.Core.Logging;
 using MongoDB.Driver.Core.Servers;
 using MongoDB.Driver.Encryption;
 
@@ -184,6 +183,13 @@ namespace MongoDB.Driver.Tests
             {
                 serverSelectionTimeoutString = "30000";
             }
+
+            if (System.Diagnostics.Debugger.IsAttached)
+            {
+                clientSettings.HeartbeatTimeout = TimeSpan.FromDays(1);
+                clientSettings.ServerMonitoringMode = ServerMonitoringMode.Poll;
+            }
+
             clientSettings.ServerSelectionTimeout = TimeSpan.FromMilliseconds(int.Parse(serverSelectionTimeoutString));
             clientSettings.ClusterConfigurator = cb => CoreTestConfiguration.ConfigureLogging(cb);
             clientSettings.ServerApi = CoreTestConfiguration.ServerApi;
@@ -197,8 +203,8 @@ namespace MongoDB.Driver.Tests
         {
             var cluster = Client.GetClusterInternal();
             using (var binding = new ReadWriteBindingHandle(new WritableServerBinding(cluster, NoCoreSession.NewHandle())))
-            using (var channelSource = binding.GetWriteChannelSource(default))
-            using (var channel = channelSource.GetChannel(default))
+            using (var channelSource = binding.GetWriteChannelSource(OperationContext.NoTimeout))
+            using (var channel = channelSource.GetChannel(OperationContext.NoTimeout))
             {
                 return channel.ConnectionDescription;
             }

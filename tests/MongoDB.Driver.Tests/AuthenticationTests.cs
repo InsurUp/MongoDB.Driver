@@ -16,7 +16,6 @@
 using System;
 using System.Linq;
 using System.Security.Cryptography.X509Certificates;
-using System.Threading;
 using FluentAssertions;
 using MongoDB.Bson;
 using MongoDB.Driver.Core.Clusters.ServerSelectors;
@@ -30,6 +29,7 @@ namespace MongoDB.Driver.Tests
     /// <summary>
     /// Authentication integration tests.
     /// </summary>
+    [Trait("Category", "Integration")]
     public class AuthenticationTests
     {
         [Theory]
@@ -336,10 +336,9 @@ namespace MongoDB.Driver.Tests
                 if (Feature.SpeculativeAuthentication.IsSupported(CoreTestConfiguration.MaxWireVersion) &&
                     speculativeAuthenticatationShouldSucceedIfPossible)
                 {
-                    var cancellationToken = CancellationToken.None;
                     var serverSelector = new ReadPreferenceServerSelector(settings.ReadPreference);
-                    var server = client.GetClusterInternal().SelectServer(serverSelector, cancellationToken);
-                    var channel = server.GetChannel(cancellationToken);
+                    var server = client.GetClusterInternal().SelectServer(OperationContext.NoTimeout, serverSelector);
+                    var channel = server.GetChannel(OperationContext.NoTimeout);
                     var helloResult = channel.ConnectionDescription.HelloResult;
                     helloResult.SpeculativeAuthenticate.Should().NotBeNull();
                 }

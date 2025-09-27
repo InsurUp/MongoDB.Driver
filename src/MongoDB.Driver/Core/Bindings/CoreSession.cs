@@ -1,4 +1,4 @@
-﻿/* Copyright 2018-present MongoDB Inc.
+﻿/* Copyright 2010-present MongoDB Inc.
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -29,7 +29,7 @@ namespace MongoDB.Driver.Core.Bindings
     /// Represents a session.
     /// </summary>
     /// <seealso cref="MongoDB.Driver.Core.Bindings.ICoreSession" />
-    public sealed class CoreSession : ICoreSession
+    public sealed class CoreSession : ICoreSession, ICoreSessionInternal
     {
         // private fields
 #pragma warning disable CA2213 // Disposable fields should be disposed
@@ -141,10 +141,15 @@ namespace MongoDB.Driver.Core.Bindings
 
         // public methods
         /// <inheritdoc />
-        public void AbortTransaction(CancellationToken cancellationToken = default(CancellationToken))
+        public void AbortTransaction(CancellationToken cancellationToken = default)
+            => ((ICoreSessionInternal)this).AbortTransaction(null, cancellationToken);
+
+        // TODO: CSOT: Make it public when CSOT will be ready for GA and add default value to cancellationToken parameter.
+        void ICoreSessionInternal.AbortTransaction(AbortTransactionOptions options, CancellationToken cancellationToken)
         {
             EnsureAbortTransactionCanBeCalled(nameof(AbortTransaction));
 
+            using var operationContext = new OperationContext(GetTimeout(options?.Timeout), cancellationToken);
             try
             {
                 if (_currentTransaction.IsEmpty)
@@ -154,11 +159,11 @@ namespace MongoDB.Driver.Core.Bindings
 
                 try
                 {
-                    var firstAttempt = CreateAbortTransactionOperation();
-                    ExecuteEndTransactionOnPrimary(firstAttempt, cancellationToken);
+                    var firstAttempt = CreateAbortTransactionOperation(operationContext);
+                    ExecuteEndTransactionOnPrimary(operationContext, firstAttempt);
                     return;
                 }
-                catch (Exception exception) when (ShouldRetryEndTransactionException(exception))
+                catch (Exception exception) when (ShouldRetryEndTransactionException(operationContext, exception))
                 {
                     // unpin if retryable error
                     _currentTransaction.UnpinAll();
@@ -172,8 +177,8 @@ namespace MongoDB.Driver.Core.Bindings
 
                 try
                 {
-                    var secondAttempt = CreateAbortTransactionOperation();
-                    ExecuteEndTransactionOnPrimary(secondAttempt, cancellationToken);
+                    var secondAttempt = CreateAbortTransactionOperation(operationContext);
+                    ExecuteEndTransactionOnPrimary(operationContext, secondAttempt);
                 }
                 catch
                 {
@@ -190,10 +195,15 @@ namespace MongoDB.Driver.Core.Bindings
         }
 
         /// <inheritdoc />
-        public async Task AbortTransactionAsync(CancellationToken cancellationToken = default(CancellationToken))
+        public Task AbortTransactionAsync(CancellationToken cancellationToken = default)
+            => ((ICoreSessionInternal)this).AbortTransactionAsync(null, cancellationToken);
+
+        // TODO: CSOT: Make it public when CSOT will be ready for GA and add default value to cancellationToken parameter.
+        async Task ICoreSessionInternal.AbortTransactionAsync(AbortTransactionOptions options, CancellationToken cancellationToken)
         {
             EnsureAbortTransactionCanBeCalled(nameof(AbortTransaction));
 
+            using var operationContext = new OperationContext(GetTimeout(options?.Timeout), cancellationToken);
             try
             {
                 if (_currentTransaction.IsEmpty)
@@ -203,11 +213,11 @@ namespace MongoDB.Driver.Core.Bindings
 
                 try
                 {
-                    var firstAttempt = CreateAbortTransactionOperation();
-                    await ExecuteEndTransactionOnPrimaryAsync(firstAttempt, cancellationToken).ConfigureAwait(false);
+                    var firstAttempt = CreateAbortTransactionOperation(operationContext);
+                    await ExecuteEndTransactionOnPrimaryAsync(operationContext, firstAttempt).ConfigureAwait(false);
                     return;
                 }
-                catch (Exception exception) when (ShouldRetryEndTransactionException(exception))
+                catch (Exception exception) when (ShouldRetryEndTransactionException(operationContext, exception))
                 {
                     // unpin if retryable error
                     _currentTransaction.UnpinAll();
@@ -221,8 +231,8 @@ namespace MongoDB.Driver.Core.Bindings
 
                 try
                 {
-                    var secondAttempt = CreateAbortTransactionOperation();
-                    await ExecuteEndTransactionOnPrimaryAsync(secondAttempt, cancellationToken).ConfigureAwait(false);
+                    var secondAttempt = CreateAbortTransactionOperation(operationContext);
+                    await ExecuteEndTransactionOnPrimaryAsync(operationContext, secondAttempt).ConfigureAwait(false);
                 }
                 catch
                 {
@@ -288,10 +298,15 @@ namespace MongoDB.Driver.Core.Bindings
         }
 
         /// <inheritdoc />
-        public void CommitTransaction(CancellationToken cancellationToken = default(CancellationToken))
+        public void CommitTransaction(CancellationToken cancellationToken = default)
+            => ((ICoreSessionInternal)this).CommitTransaction(null, cancellationToken);
+
+        // TODO: CSOT: Make it public when CSOT will be ready for GA and add default value to cancellationToken parameter.
+        void ICoreSessionInternal.CommitTransaction(CommitTransactionOptions options, CancellationToken cancellationToken)
         {
             EnsureCommitTransactionCanBeCalled(nameof(CommitTransaction));
 
+            using var operationContext = new OperationContext(GetTimeout(options?.Timeout), cancellationToken);
             try
             {
                 _isCommitTransactionInProgress = true;
@@ -302,18 +317,18 @@ namespace MongoDB.Driver.Core.Bindings
 
                 try
                 {
-                    var firstAttempt = CreateCommitTransactionOperation(IsFirstCommitAttemptRetry());
-                    ExecuteEndTransactionOnPrimary(firstAttempt, cancellationToken);
+                    var firstAttempt = CreateCommitTransactionOperation(operationContext, IsFirstCommitAttemptRetry());
+                    ExecuteEndTransactionOnPrimary(operationContext, firstAttempt);
                     return;
                 }
-                catch (Exception exception) when (ShouldRetryEndTransactionException(exception))
+                catch (Exception exception) when (ShouldRetryEndTransactionException(operationContext, exception))
                 {
                     // unpin server if needed, then ignore exception and retry
                     TransactionHelper.UnpinServerIfNeededOnRetryableCommitException(_currentTransaction, exception);
                 }
 
-                var secondAttempt = CreateCommitTransactionOperation(isCommitRetry: true);
-                ExecuteEndTransactionOnPrimary(secondAttempt, cancellationToken);
+                var secondAttempt = CreateCommitTransactionOperation(operationContext, isCommitRetry: true);
+                ExecuteEndTransactionOnPrimary(operationContext, secondAttempt);
             }
             finally
             {
@@ -323,10 +338,15 @@ namespace MongoDB.Driver.Core.Bindings
         }
 
         /// <inheritdoc />
-        public async Task CommitTransactionAsync(CancellationToken cancellationToken = default(CancellationToken))
+        public Task CommitTransactionAsync(CancellationToken cancellationToken = default)
+            => ((ICoreSessionInternal)this).CommitTransactionAsync(null, cancellationToken);
+
+        // TODO: CSOT: Make it public when CSOT will be ready for GA and add default value to cancellationToken parameter.
+        async Task ICoreSessionInternal.CommitTransactionAsync(CommitTransactionOptions options, CancellationToken cancellationToken)
         {
             EnsureCommitTransactionCanBeCalled(nameof(CommitTransaction));
 
+            using var operationContext = new OperationContext(GetTimeout(options?.Timeout), cancellationToken);
             try
             {
                 _isCommitTransactionInProgress = true;
@@ -337,18 +357,18 @@ namespace MongoDB.Driver.Core.Bindings
 
                 try
                 {
-                    var firstAttempt = CreateCommitTransactionOperation(IsFirstCommitAttemptRetry());
-                    await ExecuteEndTransactionOnPrimaryAsync(firstAttempt, cancellationToken).ConfigureAwait(false);
+                    var firstAttempt = CreateCommitTransactionOperation(operationContext, IsFirstCommitAttemptRetry());
+                    await ExecuteEndTransactionOnPrimaryAsync(operationContext, firstAttempt).ConfigureAwait(false);
                     return;
                 }
-                catch (Exception exception) when (ShouldRetryEndTransactionException(exception))
+                catch (Exception exception) when (ShouldRetryEndTransactionException(operationContext, exception))
                 {
                     // unpin server if needed, then ignore exception and retry
                     TransactionHelper.UnpinServerIfNeededOnRetryableCommitException(_currentTransaction, exception);
                 }
 
-                var secondAttempt = CreateCommitTransactionOperation(isCommitRetry: true);
-                await ExecuteEndTransactionOnPrimaryAsync(secondAttempt, cancellationToken).ConfigureAwait(false);
+                var secondAttempt = CreateCommitTransactionOperation(operationContext, isCommitRetry: true);
+                await ExecuteEndTransactionOnPrimaryAsync(operationContext, secondAttempt).ConfigureAwait(false);
             }
             finally
             {
@@ -404,7 +424,7 @@ namespace MongoDB.Driver.Core.Bindings
                 throw new InvalidOperationException("Transactions do not support unacknowledged write concerns.");
             }
 
-            _currentTransaction?.UnpinAll(); // unpin data if any when a new transaction is started 
+            _currentTransaction?.UnpinAll(); // unpin data if any when a new transaction is started
             _currentTransaction = new CoreTransaction(transactionNumber, effectiveTransactionOptions);
         }
 
@@ -424,14 +444,14 @@ namespace MongoDB.Driver.Core.Bindings
         }
 
         // private methods
-        private IReadOperation<BsonDocument> CreateAbortTransactionOperation()
+        private IReadOperation<BsonDocument> CreateAbortTransactionOperation(OperationContext operationContext)
         {
-            return new AbortTransactionOperation(_currentTransaction.RecoveryToken, GetTransactionWriteConcern());
+            return new AbortTransactionOperation(_currentTransaction.RecoveryToken, GetTransactionWriteConcern(operationContext));
         }
 
-        private IReadOperation<BsonDocument> CreateCommitTransactionOperation(bool isCommitRetry)
+        private IReadOperation<BsonDocument> CreateCommitTransactionOperation(OperationContext operationContext, bool isCommitRetry)
         {
-            var writeConcern = GetCommitTransactionWriteConcern(isCommitRetry);
+            var writeConcern = GetCommitTransactionWriteConcern(operationContext, isCommitRetry);
             var maxCommitTime = _currentTransaction.TransactionOptions.MaxCommitTime;
             return new CommitTransactionOperation(_currentTransaction.RecoveryToken, writeConcern) { MaxCommitTime = maxCommitTime };
         }
@@ -537,23 +557,26 @@ namespace MongoDB.Driver.Core.Bindings
             }
         }
 
-        private TResult ExecuteEndTransactionOnPrimary<TResult>(IReadOperation<TResult> operation, CancellationToken cancellationToken)
+        private TResult ExecuteEndTransactionOnPrimary<TResult>(OperationContext operationContext, IReadOperation<TResult> operation)
         {
             using (var sessionHandle = new NonDisposingCoreSessionHandle(this))
             using (var binding = ChannelPinningHelper.CreateReadWriteBinding(_cluster, sessionHandle))
             {
-                return operation.Execute(binding, cancellationToken);
+                return operation.Execute(operationContext, binding);
             }
         }
 
-        private async Task<TResult> ExecuteEndTransactionOnPrimaryAsync<TResult>(IReadOperation<TResult> operation, CancellationToken cancellationToken)
+        private async Task<TResult> ExecuteEndTransactionOnPrimaryAsync<TResult>(OperationContext operationContext, IReadOperation<TResult> operation)
         {
             using (var sessionHandle = new NonDisposingCoreSessionHandle(this))
             using (var binding = ChannelPinningHelper.CreateReadWriteBinding(_cluster, sessionHandle))
             {
-                return await operation.ExecuteAsync(binding, cancellationToken).ConfigureAwait(false);
+                return await operation.ExecuteAsync(operationContext, binding).ConfigureAwait(false);
             }
         }
+
+        private TimeSpan? GetTimeout(TimeSpan? timeout)
+            => timeout ?? _options.DefaultTransactionOptions?.Timeout;
 
         private TransactionOptions GetEffectiveTransactionOptions(TransactionOptions transactionOptions)
         {
@@ -564,21 +587,27 @@ namespace MongoDB.Driver.Core.Bindings
             return new TransactionOptions(readConcern, readPreference, writeConcern, maxCommitTime);
         }
 
-        private WriteConcern GetTransactionWriteConcern()
+        private WriteConcern GetTransactionWriteConcern(OperationContext operationContext)
         {
-            return
-                _currentTransaction.TransactionOptions?.WriteConcern ??
-                _options.DefaultTransactionOptions?.WriteConcern ??
-                WriteConcern.WMajority;
+            var writeConcern = _currentTransaction.TransactionOptions?.WriteConcern ??
+                               _options.DefaultTransactionOptions?.WriteConcern ??
+                               WriteConcern.WMajority;
+
+            if (operationContext.IsRootContextTimeoutConfigured())
+            {
+                writeConcern = writeConcern.With(wTimeout: null);
+            }
+
+            return writeConcern;
         }
 
-        private WriteConcern GetCommitTransactionWriteConcern(bool isCommitRetry)
+        private WriteConcern GetCommitTransactionWriteConcern(OperationContext operationContext, bool isCommitRetry)
         {
-            var writeConcern = GetTransactionWriteConcern();
+            var writeConcern = GetTransactionWriteConcern(operationContext);
             if (isCommitRetry)
             {
                 writeConcern = writeConcern.With(mode: "majority");
-                if (writeConcern.WTimeout == null)
+                if (writeConcern.WTimeout == null && !operationContext.IsRootContextTimeoutConfigured())
                 {
                     writeConcern = writeConcern.With(wTimeout: TimeSpan.FromMilliseconds(10000));
                 }
@@ -593,9 +622,14 @@ namespace MongoDB.Driver.Core.Bindings
             return _currentTransaction.State == CoreTransactionState.Committed;
         }
 
-        private bool ShouldRetryEndTransactionException(Exception exception)
+        private bool ShouldRetryEndTransactionException(OperationContext operationContext, Exception exception)
         {
-            return RetryabilityHelper.IsRetryableWriteException(exception);
+            if (!RetryabilityHelper.IsRetryableWriteException(exception))
+            {
+                return false;
+            }
+
+            return operationContext.IsRootContextTimeoutConfigured() ? !operationContext.IsTimedOut() : true;
         }
     }
 }

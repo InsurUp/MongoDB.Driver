@@ -19,7 +19,7 @@ using FluentAssertions;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 using MongoDB.Bson.Serialization.Serializers;
-using MongoDB.Driver.Core.TestHelpers.XunitExtensions;
+using MongoDB.Driver.GeoJsonObjectModel;
 using MongoDB.Driver.Search;
 using Moq;
 using Xunit;
@@ -107,10 +107,65 @@ namespace MongoDB.Driver.Tests
         }
 
         [Fact]
+        public void GeoNear_with_geojson_point_should_add_the_expected_stage()
+        {
+            var pipeline = new EmptyPipelineDefinition<BsonDocument>();
+
+            var result = pipeline.GeoNear(
+                GeoJson.Point(GeoJson.Geographic(34, 67)),
+                new GeoNearOptions<BsonDocument, BsonDocument>
+                {
+                    DistanceField = "calculatedDistance"
+                });
+
+            var stages = RenderStages(result, BsonDocumentSerializer.Instance);
+            stages.Count.Should().Be(1);
+            stages[0].Should().Be("""{ "$geoNear" : { "near" : { "type" : "Point", "coordinates" : [34.0, 67.0] }, "distanceField" : "calculatedDistance" } }""");
+        }
+
+        [Fact]
+        public void GeoNear_with_array_should_add_the_expected_stage()
+        {
+            var pipeline = new EmptyPipelineDefinition<BsonDocument>();
+
+            var result = pipeline.GeoNear(
+                [34.0, 67.0],
+                new GeoNearOptions<BsonDocument, BsonDocument>
+                {
+                    DistanceField = "calculatedDistance"
+                });
+
+            var stages = RenderStages(result, BsonDocumentSerializer.Instance);
+            stages.Count.Should().Be(1);
+            stages[0].Should().Be("""{ "$geoNear" : { "near" : [34.0, 67.0], "distanceField" : "calculatedDistance" } }""");
+        }
+
+        [Fact]
+        public void GeoNear_should_throw_when_pipeline_is_null()
+        {
+            PipelineDefinition<BsonDocument, BsonDocument> pipeline = null;
+
+            var exception = Record.Exception(() =>
+                pipeline.GeoNear<BsonDocument, BsonDocument, BsonDocument>([1.0, 2.0]));
+
+            exception.Should().BeOfType<ArgumentNullException>()
+                .Which.ParamName.Should().Be("pipeline");
+        }
+
+        [Fact]
+        public void GeoNear_should_throw_when_near_point_is_null()
+        {
+            var pipeline = new EmptyPipelineDefinition<BsonDocument>();
+
+            var exception = Record.Exception(() => pipeline.GeoNear<BsonDocument, BsonDocument, BsonDocument>(null));
+
+            exception.Should().BeOfType<ArgumentNullException>()
+                .Which.ParamName.Should().Be("near");
+        }
+
+        [Fact]
         public void Lookup_should_throw_when_pipeline_is_null()
         {
-            RequireServer.Check();
-
             PipelineDefinition<BsonDocument, IEnumerable<BsonDocument>> pipeline = null;
             IMongoCollection<BsonDocument> collection = null;
 
@@ -126,6 +181,7 @@ namespace MongoDB.Driver.Tests
         }
 
         [Fact]
+        [Trait("Category", "Integration")]
         public void Merge_should_add_expected_stage()
         {
             var pipeline = new EmptyPipelineDefinition<BsonDocument>();
@@ -156,6 +212,114 @@ namespace MongoDB.Driver.Tests
             var stages = RenderStages(result, BsonDocumentSerializer.Instance);
             stages.Count.Should().Be(1);
             stages[0].Should().Be("{ $out: { db: 'database', coll: 'collection', timeseries: { timeField: 'time', metaField: 'symbol' } } }");
+        }
+
+        [Fact]
+        public void RankFusion_with_named_pipelines_should_add_expected_stage()
+        {
+            var result = new EmptyPipelineDefinition<BsonDocument>().RankFusion(
+                new Dictionary<string, PipelineDefinition<BsonDocument, BsonDocument>>
+                {
+                    { "p1", new EmptyPipelineDefinition<BsonDocument>().Match("{ x : 1 }").Sort("{ y : 1 }") },
+                    { "p2", new EmptyPipelineDefinition<BsonDocument>().Match("{ x : 2 }").Sort("{ y : -1 }") }
+                },
+                new Dictionary<string, double>
+                {
+                    { "p1", 0.3 },
+                    { "p2", 0.7 },
+                },
+                new RankFusionOptions<BsonDocument> { ScoreDetails = true });
+
+            var stages = RenderStages(result, BsonDocumentSerializer.Instance);
+            stages.Count.Should().Be(1);
+            stages[0].Should().Be("""
+                                  {
+                                      $rankFusion: {
+                                          "input" : {
+                                              "pipelines" : {
+                                                 "p1" : [{ "$match" : { "x" : 1 } }, { "$sort" : { "y" : 1 } }],
+                                                 "p2" : [{ "$match" : { "x" : 2 } }, { "$sort" : { "y" : -1 } }]
+                                               }
+                                           },
+                                           "combination" : { "weights" : { "p1" : 0.3, "p2" : 0.7 } }
+                                           "scoreDetails" : true
+                                      }
+                                  }
+                                  """);
+        }
+
+        [Fact]
+        public void RankFusion_without_named_pipelines_should_add_expected_stage()
+        {
+            var result = new EmptyPipelineDefinition<BsonDocument>().RankFusion(
+            [
+                new EmptyPipelineDefinition<BsonDocument>().Match("{ x : 1 }").Sort("{ y : 1 }"),
+                new EmptyPipelineDefinition<BsonDocument>().Match("{ x : 2 }").Sort("{ y : -1 }")
+            ]);
+
+            var stages = RenderStages(result, BsonDocumentSerializer.Instance);
+            stages.Count.Should().Be(1);
+            stages[0].Should().Be("""
+                                  {
+                                      $rankFusion: {
+                                          "input" : {
+                                              "pipelines" : {
+                                                 "pipeline1" : [{ "$match" : { "x" : 1 } }, { "$sort" : { "y" : 1 } }],
+                                                 "pipeline2" : [{ "$match" : { "x" : 2 } }, { "$sort" : { "y" : -1 } }]
+                                               }
+                                           }
+                                      }
+                                  }
+                                  """);
+        }
+
+        [Fact]
+        public void RankFusion_using_pipeline_weight_tuples_should_add_expected_stage()
+        {
+            var result = new EmptyPipelineDefinition<BsonDocument>().RankFusion(
+            [
+                (new EmptyPipelineDefinition<BsonDocument>().Match("{ x : 1 }").Sort("{ y : 1 }"), 0.3),
+                (new EmptyPipelineDefinition<BsonDocument>().Match("{ x : 2 }").Sort("{ y : -1 }"), 0.7),
+                (new EmptyPipelineDefinition<BsonDocument>().Match("{ x : 3 }").Sort("{ y : 1 }"), null)
+            ]);
+
+            var stages = RenderStages(result, BsonDocumentSerializer.Instance);
+            stages.Count.Should().Be(1);
+            stages[0].Should().Be("""
+                                  {
+                                      $rankFusion: {
+                                          "input" : {
+                                              "pipelines" : {
+                                                 "pipeline1" : [{ "$match" : { "x" : 1 } }, { "$sort" : { "y" : 1 } }],
+                                                 "pipeline2" : [{ "$match" : { "x" : 2 } }, { "$sort" : { "y" : -1 } }],
+                                                 "pipeline3" : [{ "$match" : { "x" : 3 } }, { "$sort" : { "y" : 1 } }]
+                                               }
+                                           },
+                                           "combination" : { "weights" : { "pipeline1" : 0.3, "pipeline2" : 0.7 } }
+                                      }
+                                  }
+                                  """);
+        }
+
+        [Fact]
+        public void RankFusion_should_throw_when_pipeline_is_null()
+        {
+            PipelineDefinition<BsonDocument, BsonDocument> pipeline = null;
+
+            Assert.Throws<ArgumentNullException>(() =>
+            {
+                pipeline.RankFusion((Dictionary<string, PipelineDefinition<BsonDocument, BsonDocument>>)null);
+            }).ParamName.Should().Be("pipeline");
+
+            Assert.Throws<ArgumentNullException>(() =>
+            {
+                pipeline.RankFusion((PipelineDefinition<BsonDocument, BsonDocument>[])null);
+            }).ParamName.Should().Be("pipeline");
+
+            Assert.Throws<ArgumentNullException>(() =>
+            {
+                pipeline.RankFusion(((PipelineDefinition<BsonDocument, BsonDocument>, double?)[])null);
+            }).ParamName.Should().Be("pipeline");
         }
 
         [Theory]
