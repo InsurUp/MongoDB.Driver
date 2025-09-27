@@ -17,7 +17,6 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using MongoDB.Bson;
-#pragma warning disable CS0618 // Type or member is obsolete
 
 namespace MongoDB.Driver.Tests.UnifiedTestOperations
 {
@@ -44,9 +43,11 @@ namespace MongoDB.Driver.Tests.UnifiedTestOperations
         {
             try
             {
+#pragma warning disable CS0618 // Type or member is obsolete
                 var result = _session == null
                     ? _collection.Count(_filter, _options, cancellationToken)
                     : _collection.Count(_session, _filter, _options, cancellationToken);
+#pragma warning restore CS0618 // Type or member is obsolete
 
                 return OperationResult.FromResult(result);
             }
@@ -60,9 +61,11 @@ namespace MongoDB.Driver.Tests.UnifiedTestOperations
         {
             try
             {
+#pragma warning disable CS0618 // Type or member is obsolete
                 var result = _session == null
                     ? await _collection.CountAsync(_filter, _options, cancellationToken)
                     : await _collection.CountAsync(_session, _filter, _options, cancellationToken);
+#pragma warning restore CS0618 // Type or member is obsolete
 
                 return OperationResult.FromResult(result);
             }
@@ -101,8 +104,16 @@ namespace MongoDB.Driver.Tests.UnifiedTestOperations
                     case "filter":
                         filter = new BsonDocumentFilterDefinition<BsonDocument>(argument.Value.AsBsonDocument);
                         break;
+                    case "maxTimeMS":
+                        options ??= new CountOptions();
+                        options.MaxTime = TimeSpan.FromMilliseconds(argument.Value.AsInt32);
+                        break;
                     case "session":
                         session = _entityMap.Sessions[argument.Value.AsString];
+                        break;
+                    case "timeoutMS":
+                        options ??= new CountOptions();
+                        options.Timeout = UnifiedEntityMap.ParseTimeout(argument.Value);
                         break;
                     default:
                         throw new FormatException($"Invalid CountOperation argument name: '{argument.Name}'.");

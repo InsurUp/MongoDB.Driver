@@ -44,11 +44,14 @@ namespace MongoDB.Driver.Core.Misc
         private static readonly Feature __clientBulkWrite = new Feature("ClientBulkWrite", WireVersion.Server80);
         private static readonly Feature __clientSideEncryption = new Feature("ClientSideEncryption", WireVersion.Server42);
         private static readonly Feature __clusteredIndexes = new Feature("ClusteredIndexes", WireVersion.Server53);
+        private static readonly Feature __convertOperatorBinDataToFromNumeric = new Feature("ConvertOperatorBinDataToFromNumeric", WireVersion.Server81);
+        private static readonly Feature __convertOperatorBinDataToFromString= new Feature("ConvertOperatorBinDataToFromString", WireVersion.Server80);
         private static readonly Feature __createIndexCommitQuorum = new Feature("CreateIndexCommitQuorum", WireVersion.Server44);
         private static readonly Feature __createIndexesUsingInsertOperations = new Feature("CreateIndexesUsingInsertOperations", WireVersion.Zero, WireVersion.Server42);
         private static readonly Feature __csfleRangeAlgorithm = new Feature("CsfleRangeAlgorithm", WireVersion.Server62);
         private static readonly Feature __csfle2Qev2Lookup = new Feature("csfle2Qev2Lookup", WireVersion.Server81);
         private static readonly Feature __csfle2Qev2RangeAlgorithm = new Feature("csfle2Qev2RangeAlgorithm", WireVersion.Server80);
+        private static readonly Feature __csfle2Qev2TextPreviewAlgorithm = new Feature("csfle2Qev2TextPreviewAlgorithm", WireVersion.Server82);
         private static readonly Feature __csfle2 = new Feature("Csfle2", WireVersion.Server60);
         private static readonly Feature __csfle2Qev2 = new Feature("Csfle2Qev2", WireVersion.Server70, notSupportedMessage: "Driver support of Queryable Encryption is incompatible with server. Upgrade server to use Queryable Encryption.");
         private static readonly Feature __dateFromStringFormatArgument = new Feature("DateFromStringFormatArgument", WireVersion.Server40);
@@ -81,7 +84,10 @@ namespace MongoDB.Driver.Core.Misc
         private static readonly Feature __loookupConciseSyntax = new Feature("LoookupConciseSyntax", WireVersion.Server50);
         private static readonly Feature __loookupDocuments= new Feature("LoookupDocuments", WireVersion.Server60);
         private static readonly Feature __mmapV1StorageEngine = new Feature("MmapV1StorageEngine", WireVersion.Zero, WireVersion.Server42);
+        private static readonly Feature __medianOperator = new Feature("MedianOperator", WireVersion.Server70);
+        private static readonly Feature __percentileOperator = new Feature("PercentileOperator", WireVersion.Server70);
         private static readonly Feature __pickAccumulatorsNewIn52 = new Feature("PickAccumulatorsNewIn52", WireVersion.Server52);
+        private static readonly Feature __rankFusionStage = new Feature("RankFusionStage", WireVersion.Server81);
         private static readonly Feature __regexMatch = new Feature("RegexMatch", WireVersion.Server42);
         private static readonly Feature __round = new Feature("Round", WireVersion.Server42);
         private static readonly Feature __scramSha256Authentication = new Feature("ScramSha256Authentication", WireVersion.Server40);
@@ -91,6 +97,7 @@ namespace MongoDB.Driver.Core.Misc
         private static readonly Feature __setWindowFields = new Feature("SetWindowFields", WireVersion.Server50);
         private static readonly Feature __setWindowFieldsLocf = new Feature("SetWindowFieldsLocf", WireVersion.Server52);
         private static readonly Feature __shardedTransactions = new Feature("ShardedTransactions", WireVersion.Server42);
+        private static readonly Feature __sigmoidOperator = new Feature("SigmoidOperator", WireVersion.Server81);
         private static readonly Feature __snapshotReads = new Feature("SnapshotReads", WireVersion.Server50, notSupportedMessage: "Snapshot reads require MongoDB 5.0 or later");
         private static readonly Feature __sortArrayOperator = new Feature("SortArrayOperator", WireVersion.Server52);
         private static readonly Feature __speculativeAuthentication = new Feature("SpeculativeAuthentication", WireVersion.Server44);
@@ -194,6 +201,16 @@ namespace MongoDB.Driver.Core.Misc
         public static Feature ClusteredIndexes => __clusteredIndexes;
 
         /// <summary>
+        /// Gets the conversion of binary data to/from numeric types feature.
+        /// </summary>
+        public static Feature ConvertOperatorBinDataToFromNumeric => __convertOperatorBinDataToFromNumeric;
+
+        /// <summary>
+        /// Gets the conversion of binary data to/from string feature.
+        /// </summary>
+        public static Feature ConvertOperatorBinDataToFromString => __convertOperatorBinDataToFromString;
+
+        /// <summary>
         /// Gets the create index commit quorum feature.
         /// </summary>
         public static Feature CreateIndexCommitQuorum => __createIndexCommitQuorum;
@@ -201,6 +218,7 @@ namespace MongoDB.Driver.Core.Misc
         /// <summary>
         /// Gets the create indexes using insert operations feature.
         /// </summary>
+        [Obsolete("This feature was removed in server version 4.2. As such, this property will be removed in a later release.")]
         public static Feature CreateIndexesUsingInsertOperations => __createIndexesUsingInsertOperations;
 
         /// <summary>
@@ -227,6 +245,11 @@ namespace MongoDB.Driver.Core.Misc
         /// Gets the csfle2 range algorithm feature.
         /// </summary>
         public static Feature Csfle2QEv2RangeAlgorithm => __csfle2Qev2RangeAlgorithm;
+
+        /// <summary>
+        /// Gets the csfle2 textPreview algorithm feature.
+        /// </summary>
+        public static Feature Csfle2QEv2TextPreviewAlgorithm => __csfle2Qev2TextPreviewAlgorithm;
 
         /// <summary>
         /// Gets the $dateFromString format argument feature.
@@ -261,6 +284,7 @@ namespace MongoDB.Driver.Core.Misc
         /// <summary>
         /// Gets the eval feature.
         /// </summary>
+        [Obsolete("This feature was removed in server version 4.2. As such, this property will be removed in a later release.")]
         public static Feature Eval => __eval;
 
         /// <summary>
@@ -297,6 +321,8 @@ namespace MongoDB.Driver.Core.Misc
         /// <summary>
         /// Gets the geoNear command feature.
         /// </summary>
+        ///
+        [Obsolete("This property will be removed in a later release.")]
         public static Feature GeoNearCommand => __geoNearCommand;
 
         /// <summary>
@@ -312,6 +338,7 @@ namespace MongoDB.Driver.Core.Misc
         /// <summary>
         /// Gets the group command feature.
         /// </summary>
+        [Obsolete("This feature was removed in server version 4.2. As such, this property will be removed in a later release.")]
         public static Feature GroupCommand => __groupCommand;
 
         /// <summary>
@@ -379,12 +406,28 @@ namespace MongoDB.Driver.Core.Misc
         /// <summary>
         /// Gets the mmapv1 storage engine feature.
         /// </summary>
+        [Obsolete("This feature was removed in server version 4.2. As such, this property will be removed in a later release.")]
         public static Feature MmapV1StorageEngine => __mmapV1StorageEngine;
+
+        /// <summary>
+        /// Gets the $median operator added in 7.0
+        /// </summary>
+        public static Feature MedianOperator => __medianOperator;
+
+        /// <summary>
+        /// Gets the $percentile operator added in 7.0
+        /// </summary>
+        public static Feature PercentileOperator => __percentileOperator;
 
         /// <summary>
         /// Gets the pick accumulators new in 5.2 feature.
         /// </summary>
         public static Feature PickAccumulatorsNewIn52 => __pickAccumulatorsNewIn52;
+
+        /// <summary>
+        /// Gets the $rankFusion feature.
+        /// </summary>
+        public static Feature RankFusionStage => __rankFusionStage;
 
         /// <summary>
         /// Gets the regex match feature.
@@ -430,6 +473,11 @@ namespace MongoDB.Driver.Core.Misc
         /// Gets the sharded transactions feature.
         /// </summary>
         public static Feature ShardedTransactions => __shardedTransactions;
+
+        /// <summary>
+        /// Gets the $sigmoid operator feature.
+        /// </summary>
+        public static Feature SigmoidOperator => __sigmoidOperator;
 
         /// <summary>
         /// Gets the snapshot reads feature.
@@ -539,9 +587,11 @@ namespace MongoDB.Driver.Core.Misc
         public void ThrowIfNotSupported(IMongoClient client, CancellationToken cancellationToken = default)
         {
             var cluster = client.GetClusterInternal();
+            // TODO: CSOT implement proper way to obtain the operationContext
+            var operationContext = new OperationContext(null, cancellationToken);
             using (var binding = new ReadWriteBindingHandle(new WritableServerBinding(cluster, NoCoreSession.NewHandle())))
-            using (var channelSource = binding.GetWriteChannelSource(cancellationToken))
-            using (var channel = channelSource.GetChannel(cancellationToken))
+            using (var channelSource = binding.GetWriteChannelSource(operationContext))
+            using (var channel = channelSource.GetChannel(operationContext))
             {
                 // Use WireVersion from a connection since server level value may be null
                 ThrowIfNotSupported(channel.ConnectionDescription.MaxWireVersion);
@@ -556,9 +606,11 @@ namespace MongoDB.Driver.Core.Misc
         public async Task ThrowIfNotSupportedAsync(IMongoClient client, CancellationToken cancellationToken = default)
         {
             var cluster = client.GetClusterInternal();
+            // TODO: CSOT implement proper way to obtain the operationContext
+            var operationContext = new OperationContext(null, cancellationToken);
             using (var binding = new ReadWriteBindingHandle(new WritableServerBinding(cluster, NoCoreSession.NewHandle())))
-            using (var channelSource = await binding.GetWriteChannelSourceAsync(cancellationToken).ConfigureAwait(false))
-            using (var channel = await channelSource.GetChannelAsync(cancellationToken).ConfigureAwait(false))
+            using (var channelSource = await binding.GetWriteChannelSourceAsync(operationContext).ConfigureAwait(false))
+            using (var channel = await channelSource.GetChannelAsync(operationContext).ConfigureAwait(false))
             {
                 // Use WireVersion from a connection since server level value may be null
                 ThrowIfNotSupported(channel.ConnectionDescription.MaxWireVersion);

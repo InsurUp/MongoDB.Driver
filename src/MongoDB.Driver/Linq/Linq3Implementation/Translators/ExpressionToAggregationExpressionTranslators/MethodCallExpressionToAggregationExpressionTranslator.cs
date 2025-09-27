@@ -39,6 +39,7 @@ namespace MongoDB.Driver.Linq.Linq3Implementation.Translators.ExpressionToAggreg
                 case "Contains": return ContainsMethodToAggregationExpressionTranslator.Translate(context, expression);
                 case "ContainsKey": return ContainsKeyMethodToAggregationExpressionTranslator.Translate(context, expression);
                 case "ContainsValue": return ContainsValueMethodToAggregationExpressionTranslator.Translate(context, expression);
+                case "Convert": return ConvertMethodToAggregationExpressionTranslator.Translate(context, expression);
                 case "CovariancePopulation": return CovariancePopulationMethodToAggregationExpressionTranslator.Translate(context, expression);
                 case "CovarianceSample": return CovarianceSampleMethodToAggregationExpressionTranslator.Translate(context, expression);
                 case "Create": return CreateMethodToAggregationExpressionTranslator.Translate(context, expression);
@@ -63,8 +64,10 @@ namespace MongoDB.Driver.Linq.Linq3Implementation.Translators.ExpressionToAggreg
                 case "IsNullOrWhiteSpace": return IsNullOrWhiteSpaceMethodToAggregationExpressionTranslator.Translate(context, expression);
                 case "IsSubsetOf": return IsSubsetOfMethodToAggregationExpressionTranslator.Translate(context, expression);
                 case "Locf": return LocfMethodToAggregationExpressionTranslator.Translate(context, expression);
+                case "Median": return MedianMethodToAggregationExpressionTranslator.Translate(context, expression);
                 case "OfType": return OfTypeMethodToAggregationExpressionTranslator.Translate(context, expression);
                 case "Parse": return ParseMethodToAggregationExpressionTranslator.Translate(context, expression);
+                case "Percentile": return PercentileMethodToAggregationExpressionTranslator.Translate(context, expression);
                 case "Pow": return PowMethodToAggregationExpressionTranslator.Translate(context, expression);
                 case "Push": return PushMethodToAggregationExpressionTranslator.Translate(context, expression);
                 case "Range": return RangeMethodToAggregationExpressionTranslator.Translate(context, expression);
@@ -77,6 +80,7 @@ namespace MongoDB.Driver.Linq.Linq3Implementation.Translators.ExpressionToAggreg
                 case "SequenceEqual": return SequenceEqualMethodToAggregationExpressionTranslator.Translate(context, expression);
                 case "SetEquals": return SetEqualsMethodToAggregationExpressionTranslator.Translate(context, expression);
                 case "Shift": return ShiftMethodToAggregationExpressionTranslator.Translate(context, expression);
+                case "Sigmoid": return SigmoidMethodToAggregationExpressionTranslator.Translate(context, expression);
                 case "Split": return SplitMethodToAggregationExpressionTranslator.Translate(context, expression);
                 case "Sqrt": return SqrtMethodToAggregationExpressionTranslator.Translate(context, expression);
                 case "StrLenBytes": return StrLenBytesMethodToAggregationExpressionTranslator.Translate(context, expression);

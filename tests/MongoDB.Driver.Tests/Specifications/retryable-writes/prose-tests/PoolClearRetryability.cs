@@ -28,12 +28,12 @@ using MongoDB.Driver.Core.Events;
 using MongoDB.Driver.Core.Misc;
 using MongoDB.Driver.Core.TestHelpers;
 using MongoDB.Driver.Core.TestHelpers.XunitExtensions;
-using MongoDB.Driver.TestHelpers;
 using MongoDB.TestHelpers.XunitExtensions;
 using Xunit;
 
 namespace MongoDB.Driver.Tests.Specifications.retryable_writes.prose_tests
 {
+    [Trait("Category", "Integration")]
     public class PoolClearRetryability
     {
         [Theory]
@@ -82,7 +82,7 @@ namespace MongoDB.Driver.Tests.Specifications.retryable_writes.prose_tests
                .Capture<ConnectionPoolCheckingOutConnectionFailedEvent>()
                .CaptureCommandEvents("insert");
 
-            var failpointServer = DriverTestConfiguration.Client.GetClusterInternal().SelectServer(failPointSelector, default);
+            var failpointServer = DriverTestConfiguration.Client.GetClusterInternal().SelectServer(OperationContext.NoTimeout, failPointSelector);
             using var failPoint = FailPoint.Configure(failpointServer, NoCoreSession.NewHandle(), failPointCommand);
 
             using var client = CreateClient(settings, eventCapturer, heartbeatInterval);

@@ -14,19 +14,21 @@
 */
 
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using FluentAssertions;
 using MongoDB.Bson;
 using MongoDB.Bson.IO;
 using MongoDB.TestHelpers.XunitExtensions;
-using MongoDB.Driver;
 using Xunit.Sdk;
 
 namespace MongoDB.Driver.Tests.UnifiedTestOperations.Matchers
 {
     public class UnifiedValueMatcher
     {
+        private static readonly List<string> __numericTypes = ["int", "long", "double", "decimal"];
+
         private UnifiedEntityMap _entityMap;
 
         public UnifiedValueMatcher(UnifiedEntityMap entityMap)
@@ -96,6 +98,7 @@ namespace MongoDB.Driver.Tests.UnifiedTestOperations.Matchers
                 {
                     var expectedName = expectedElement.Name;
                     var expectedValue = expectedElement.Value;
+                    var matchCurrentElementAsRoot = false;
 
                     if (expectedValue.IsBsonDocument &&
                         expectedValue.AsBsonDocument.ElementCount == 1 &&
@@ -104,6 +107,7 @@ namespace MongoDB.Driver.Tests.UnifiedTestOperations.Matchers
                         var specialOperatorDocument = expectedValue.AsBsonDocument;
                         var operatorName = specialOperatorDocument.GetElement(0).Name;
                         var operatorValue = specialOperatorDocument[0];
+
                         switch (operatorName)
                         {
                             case "$$exists":
@@ -120,13 +124,21 @@ namespace MongoDB.Driver.Tests.UnifiedTestOperations.Matchers
                                 actualDocument.Names.Should().Contain(expectedName);
                                 AssertExpectedType(actualDocument[expectedName], operatorValue);
                                 continue;
+                            case "$$lte":
+                                var actualElement = actualDocument[expectedName];
+                                actualElement.IsNumeric.Should().BeTrue();
+                                actualElement.ToDouble().Should().BeLessOrEqualTo(operatorValue.ToDouble());
+                                continue;
                             case "$$matchAsDocument":
                                 var parsedDocument = BsonDocument.Parse(actualDocument[expectedName].AsString);
                                 AssertValuesMatch(parsedDocument, operatorValue, false);
                                 continue;
+                            case "$$matchAsRoot":
+                                matchCurrentElementAsRoot = true;
+                                break;
                             case "$$matchesEntity":
                                 var resultId = operatorValue.AsString;
-                                expectedValue = _entityMap.Resutls[resultId];
+                                expectedValue = _entityMap.Results[resultId];
                                 break;
                             case "$$matchesHexBytes":
                                 expectedValue = operatorValue;
@@ -148,7 +160,7 @@ namespace MongoDB.Driver.Tests.UnifiedTestOperations.Matchers
                     }
 
                     actualDocument.Names.Should().Contain(expectedName);
-                    AssertValuesMatch(actualDocument[expectedName], expectedValue, isRoot: false);
+                    AssertValuesMatch(actualDocument[expectedName], expectedValue, isRoot: matchCurrentElementAsRoot);
                 }
 
                 if (!isRoot)
@@ -188,7 +200,8 @@ namespace MongoDB.Driver.Tests.UnifiedTestOperations.Matchers
 
             if (expectedTypes.IsString)
             {
-                expectedTypeNames = new List<string> { expectedTypes.AsString };
+                var expectedType = expectedTypes.AsString;
+                expectedTypeNames = expectedType == "number" ? __numericTypes : [expectedType];
             }
             else if (expectedTypes.IsBsonArray)
             {

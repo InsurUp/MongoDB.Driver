@@ -139,7 +139,7 @@ namespace MongoDB.Driver.Search
             TField value,
             SearchScoreDefinition<TDocument> score = null) =>
                 Equals(new ExpressionFieldDefinition<TDocument, TField>(path), value, score);
-        
+
         /// <summary>
         /// Creates a search definition that queries for documents where at least one element in an indexed array field is equal
         /// to the specified value.
@@ -340,7 +340,7 @@ namespace MongoDB.Driver.Search
             IEnumerable<TField> values,
             SearchScoreDefinition<TDocument> score = null) =>
                 In(new ExpressionFieldDefinition<TDocument>(path), values, score);
-        
+
         /// <summary>
         /// Creates a search definition that queries for documents where the value of the field equals to any of specified values.
         /// </summary>
@@ -550,7 +550,21 @@ namespace MongoDB.Driver.Search
             SearchQueryDefinition query,
             int? slop = null,
             SearchScoreDefinition<TDocument> score = null) =>
-                new PhraseSearchDefinition<TDocument>(path, query, slop, score);
+                new PhraseSearchDefinition<TDocument>(path, query, new SearchPhraseOptions<TDocument> { Slop = slop, Score = score });
+
+        /// <summary>
+        /// Creates a search definition that performs search for documents containing an ordered
+        /// sequence of terms.
+        /// </summary>
+        /// <param name="path">The indexed field or fields to search.</param>
+        /// <param name="query">The string or strings to search for.</param>
+        /// <param name="options">The options.</param>
+        /// <returns>A phrase search definition.</returns>
+        public SearchDefinition<TDocument> Phrase(
+            SearchPathDefinition<TDocument> path,
+            SearchQueryDefinition query,
+            SearchPhraseOptions<TDocument> options) =>
+                new PhraseSearchDefinition<TDocument>(path, query, options);
 
         /// <summary>
         /// Creates a search definition that performs search for documents containing an ordered
@@ -568,6 +582,21 @@ namespace MongoDB.Driver.Search
             int? slop = null,
             SearchScoreDefinition<TDocument> score = null) =>
                 Phrase(new ExpressionFieldDefinition<TDocument>(path), query, slop, score);
+
+        /// <summary>
+        /// Creates a search definition that performs search for documents containing an ordered
+        /// sequence of terms.
+        /// </summary>
+        /// <typeparam name="TField">The type of the field.</typeparam>
+        /// <param name="path">The indexed field or fields to search.</param>
+        /// <param name="query">The string or strings to search for.</param>
+        /// <param name="options">The options.</param>
+        /// <returns>A phrase search definition.</returns>
+        public SearchDefinition<TDocument> Phrase<TField>(
+            Expression<Func<TDocument, TField>> path,
+            SearchQueryDefinition query,
+            SearchPhraseOptions<TDocument> options) =>
+                Phrase(new ExpressionFieldDefinition<TDocument>(path), query, options);
 
         /// <summary>
         /// Creates a search definition that queries a combination of indexed fields and values.
@@ -610,7 +639,7 @@ namespace MongoDB.Driver.Search
             SearchScoreDefinition<TDocument> score = null)
             where TField : struct, IComparable<TField> =>
                 Range(new ExpressionFieldDefinition<TDocument>(path), range, score);
-        
+
         /// <summary>
         /// Creates a search definition that queries for documents where a field is in the specified range.
         /// </summary>
@@ -643,9 +672,9 @@ namespace MongoDB.Driver.Search
                 path,
                 new SearchRangeV2<TField>(
                     range.Min.HasValue ? new(range.Min.Value, range.IsMinInclusive) : null,
-                    range.Max.HasValue ? new(range.Max.Value, range.IsMaxInclusive) : null), 
+                    range.Max.HasValue ? new(range.Max.Value, range.IsMaxInclusive) : null),
                 score);
-        
+
         /// <summary>
         /// Creates a search definition that queries for documents where a field is in the specified range.
         /// </summary>
@@ -659,7 +688,7 @@ namespace MongoDB.Driver.Search
             SearchRangeV2<TField> range,
             SearchScoreDefinition<TDocument> score = null) =>
             Range(new ExpressionFieldDefinition<TDocument>(path), range, score);
-        
+
         /// <summary>
         /// Creates a search definition that queries for documents where a field is in the specified range.
         /// </summary>
@@ -673,7 +702,7 @@ namespace MongoDB.Driver.Search
             SearchRangeV2<TField> range,
             SearchScoreDefinition<TDocument> score = null) =>
             Range(new ExpressionFieldDefinition<TDocument>(path), range, score);
-        
+
         /// <summary>
         /// Creates a search definition that queries for documents where a field is in the specified range.
         /// </summary>
@@ -738,6 +767,20 @@ namespace MongoDB.Driver.Search
         /// </summary>
         /// <param name="path">The indexed field or fields to search.</param>
         /// <param name="query">The string or strings to search for.</param>
+        /// <param name="options">The options.</param>
+        /// <returns>A text search definition.</returns>
+        public SearchDefinition<TDocument> Text(
+            SearchPathDefinition<TDocument> path,
+            SearchQueryDefinition query,
+            SearchTextOptions<TDocument> options) =>
+                new TextSearchDefinition<TDocument>(path, query, options);
+
+        /// <summary>
+        /// Creates a search definition that performs full-text search using the analyzer specified
+        /// in the index configuration.
+        /// </summary>
+        /// <param name="path">The indexed field or fields to search.</param>
+        /// <param name="query">The string or strings to search for.</param>
         /// <param name="fuzzy">The options for fuzzy search.</param>
         /// <param name="score">The score modifier.</param>
         /// <returns>A text search definition.</returns>
@@ -746,7 +789,7 @@ namespace MongoDB.Driver.Search
             SearchQueryDefinition query,
             SearchFuzzyOptions fuzzy = null,
             SearchScoreDefinition<TDocument> score = null) =>
-                new TextSearchDefinition<TDocument>(path, query, fuzzy, score, null);
+                new TextSearchDefinition<TDocument>(path, query, new SearchTextOptions<TDocument> { Fuzzy = fuzzy, Score = score });
 
         /// <summary>
         /// Creates a search definition that performs full-text search with synonyms using the analyzer specified
@@ -762,7 +805,22 @@ namespace MongoDB.Driver.Search
             SearchQueryDefinition query,
             string synonyms,
             SearchScoreDefinition<TDocument> score = null) =>
-                new TextSearchDefinition<TDocument>(path, query, null, score, synonyms);
+                new TextSearchDefinition<TDocument>(path, query, new SearchTextOptions<TDocument> { Score = score, Synonyms = synonyms });
+
+        /// <summary>
+        /// Creates a search definition that performs full-text search using the analyzer specified
+        /// in the index configuration.
+        /// </summary>
+        /// <typeparam name="TField">The type of the field.</typeparam>
+        /// <param name="path">The indexed field or field to search.</param>
+        /// <param name="query">The string or strings to search for.</param>
+        /// <param name="options">The options.</param>
+        /// <returns>A text search definition.</returns>
+        public SearchDefinition<TDocument> Text<TField>(
+            Expression<Func<TDocument, TField>> path,
+            SearchQueryDefinition query,
+            SearchTextOptions<TDocument> options) =>
+                Text(new ExpressionFieldDefinition<TDocument>(path), query, options);
 
         /// <summary>
         /// Creates a search definition that performs full-text search using the analyzer specified

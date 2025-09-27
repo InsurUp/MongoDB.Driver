@@ -49,21 +49,43 @@ namespace MongoDB.Driver.Core.Connections
         public Stream CreateStream(EndPoint endPoint, CancellationToken cancellationToken)
         {
 #if NET472
-            var socket = CreateSocket(endPoint);
-            Connect(socket, endPoint, cancellationToken);
-            return CreateNetworkStream(socket);
+            Socket socket = null;
+            NetworkStream stream = null;
+
+            try
+            {
+                socket = CreateSocket(endPoint);
+                Connect(socket, endPoint, cancellationToken);
+                stream = CreateNetworkStream(socket);
+
+                return stream;
+            }
+            catch
+            {
+                socket?.Dispose();
+                stream?.Dispose();
+
+                throw;
+            }
 #else
             var resolved = ResolveEndPoints(endPoint);
-            for (int i = 0; i < resolved.Length; i++)
+            for (var i = 0; i < resolved.Length; i++)
             {
+                Socket socket = null;
+                NetworkStream stream = null;
+
                 try
                 {
-                    var socket = CreateSocket(resolved[i]);
+                    socket = CreateSocket(resolved[i]);
                     Connect(socket, resolved[i], cancellationToken);
-                    return CreateNetworkStream(socket);
+                    stream = CreateNetworkStream(socket);
+                    return stream;
                 }
                 catch
                 {
+                    socket?.Dispose();
+                    stream?.Dispose();
+
                     // if we have tried all of them and still failed,
                     // then blow up.
                     if (i == resolved.Length - 1)
@@ -74,28 +96,49 @@ namespace MongoDB.Driver.Core.Connections
             }
 
             // we should never get here...
-            throw new InvalidOperationException("Unabled to resolve endpoint.");
+            throw new InvalidOperationException("Unable to resolve endpoint.");
 #endif
         }
 
         public async Task<Stream> CreateStreamAsync(EndPoint endPoint, CancellationToken cancellationToken)
         {
 #if NET472
-            var socket = CreateSocket(endPoint);
-            await ConnectAsync(socket, endPoint, cancellationToken).ConfigureAwait(false);
-            return CreateNetworkStream(socket);
+            Socket socket = null;
+            NetworkStream stream = null;
+
+            try
+            {
+                socket = CreateSocket(endPoint);
+                await ConnectAsync(socket, endPoint, cancellationToken).ConfigureAwait(false);
+                stream = CreateNetworkStream(socket);
+                return stream;
+            }
+            catch
+            {
+                socket?.Dispose();
+                stream?.Dispose();
+
+                throw;
+            }
 #else
             var resolved = await ResolveEndPointsAsync(endPoint).ConfigureAwait(false);
             for (int i = 0; i < resolved.Length; i++)
             {
+                Socket socket = null;
+                NetworkStream stream = null;
+
                 try
                 {
-                    var socket = CreateSocket(resolved[i]);
+                    socket = CreateSocket(resolved[i]);
                     await ConnectAsync(socket, resolved[i], cancellationToken).ConfigureAwait(false);
-                    return CreateNetworkStream(socket);
+                    stream = CreateNetworkStream(socket);
+                    return stream;
                 }
                 catch
                 {
+                    socket?.Dispose();
+                    stream?.Dispose();
+
                     // if we have tried all of them and still failed,
                     // then blow up.
                     if (i == resolved.Length - 1)
@@ -138,7 +181,10 @@ namespace MongoDB.Driver.Core.Connections
 
             if (!connectOperation.IsCompleted)
             {
-                try { socket.Dispose(); } catch { }
+                try
+                {
+                    socket.Dispose();
+                } catch { }
 
                 cancellationToken.ThrowIfCancellationRequested();
                 throw new TimeoutException($"Timed out connecting to {endPoint}. Timeout was {_settings.ConnectTimeout}.");
@@ -164,7 +210,12 @@ namespace MongoDB.Driver.Core.Connections
 
             if (!connectTask.IsCompleted)
             {
-                try { socket.Dispose(); } catch { }
+                try
+                {
+                    socket.Dispose();
+                    // should await on the read task to avoid UnobservedTaskException
+                    await connectTask.ConfigureAwait(false);
+                } catch { }
 
                 cancellationToken.ThrowIfCancellationRequested();
                 throw new TimeoutException($"Timed out connecting to {endPoint}. Timeout was {_settings.ConnectTimeout}.");
@@ -184,28 +235,7 @@ namespace MongoDB.Driver.Core.Connections
         private NetworkStream CreateNetworkStream(Socket socket)
         {
             ConfigureConnectedSocket(socket);
-
-            var stream = new NetworkStream(socket, true);
-
-            if (_settings.ReadTimeout.HasValue)
-            {
-                var readTimeout = (int)_settings.ReadTimeout.Value.TotalMilliseconds;
-                if (readTimeout != 0)
-                {
-                    stream.ReadTimeout = readTimeout;
-                }
-            }
-
-            if (_settings.WriteTimeout.HasValue)
-            {
-                var writeTimeout = (int)_settings.WriteTimeout.Value.TotalMilliseconds;
-                if (writeTimeout != 0)
-                {
-                    stream.WriteTimeout = writeTimeout;
-                }
-            }
-
-            return stream;
+            return new NetworkStream(socket, true);
         }
 
         private Socket CreateSocket(EndPoint endPoint)
@@ -250,20 +280,18 @@ namespace MongoDB.Driver.Core.Connections
 
         private EndPoint[] ResolveEndPoints(EndPoint initial)
         {
-            var dnsInitial = initial as DnsEndPoint;
-            if (dnsInitial == null)
+            if (initial is not DnsEndPoint dnsInitial)
             {
-                return new[] { initial };
+                return [initial];
             }
 
-            IPAddress address;
-            if (IPAddress.TryParse(dnsInitial.Host, out address))
+            if (IPAddress.TryParse(dnsInitial.Host, out var address))
             {
-                return new[] { new IPEndPoint(address, dnsInitial.Port) };
+                return [new IPEndPoint(address, dnsInitial.Port)];
             }
 
             var preferred = initial.AddressFamily;
-            if (preferred == AddressFamily.Unspecified || preferred == AddressFamily.Unknown)
+            if (preferred is AddressFamily.Unspecified or AddressFamily.Unknown)
             {
                 preferred = _settings.AddressFamily;
             }
@@ -277,20 +305,18 @@ namespace MongoDB.Driver.Core.Connections
 
         private async Task<EndPoint[]> ResolveEndPointsAsync(EndPoint initial)
         {
-            var dnsInitial = initial as DnsEndPoint;
-            if (dnsInitial == null)
+            if (initial is not DnsEndPoint dnsInitial)
             {
-                return new[] { initial };
+                return [initial];
             }
 
-            IPAddress address;
-            if (IPAddress.TryParse(dnsInitial.Host, out address))
+            if (IPAddress.TryParse(dnsInitial.Host, out var address))
             {
-                return new[] { new IPEndPoint(address, dnsInitial.Port) };
+                return [new IPEndPoint(address, dnsInitial.Port)];
             }
 
             var preferred = initial.AddressFamily;
-            if (preferred == AddressFamily.Unspecified || preferred == AddressFamily.Unknown)
+            if (preferred is AddressFamily.Unspecified or AddressFamily.Unknown)
             {
                 preferred = _settings.AddressFamily;
             }

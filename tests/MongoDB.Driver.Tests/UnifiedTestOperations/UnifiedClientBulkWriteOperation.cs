@@ -18,7 +18,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using FluentAssertions;
 using MongoDB.Bson;
 
 namespace MongoDB.Driver.Tests.UnifiedTestOperations
@@ -103,7 +102,7 @@ namespace MongoDB.Driver.Tests.UnifiedTestOperations
                 { "deletedCount", (int)result.DeletedCount },
                 {
                     "insertResults", ConvertResults(result.InsertResults,
-                        item => new() { { "insertedId", item.InsertedId } })
+                        item => new() { { "insertedId", BsonValue.Create(item.DocumentId) } })
                 },
                 {
                     "updateResults", ConvertResults(result.UpdateResults,

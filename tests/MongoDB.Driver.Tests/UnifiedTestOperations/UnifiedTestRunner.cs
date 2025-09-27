@@ -108,7 +108,7 @@ namespace MongoDB.Driver.Tests.UnifiedTestOperations
 
             var schemaSemanticVersion = SemanticVersion.Parse(schemaVersion);
             if (schemaSemanticVersion < new SemanticVersion(1, 0, 0) ||
-                schemaSemanticVersion > new SemanticVersion(1, 22, 0))
+                schemaSemanticVersion > new SemanticVersion(1, 26, 0))
             {
                 throw new FormatException($"Schema version '{schemaVersion}' is not supported.");
             }
@@ -125,15 +125,9 @@ namespace MongoDB.Driver.Tests.UnifiedTestOperations
                 throw new SkipException($"Test skipped because '{skipReason}'.");
             }
 
-            KillOpenTransactions(DriverTestConfiguration.Client);
-
-            _entityMap = UnifiedEntityMap.Create(_eventFormatters, _loggingService.LoggingSettings, async);
+            var lastKnownClusterTime = AddInitialData(DriverTestConfiguration.Client, initialData);
+            _entityMap = UnifiedEntityMap.Create(_eventFormatters, _loggingService.LoggingSettings, async, lastKnownClusterTime);
             _entityMap.AddRange(entities);
-
-            if (initialData != null)
-            {
-                AddInitialData(DriverTestConfiguration.Client, initialData, _entityMap);
-            }
 
             foreach (var operation in operations)
             {
@@ -176,45 +170,58 @@ namespace MongoDB.Driver.Tests.UnifiedTestOperations
         }
 
         // private methods
-        private void AddInitialData(IMongoClient client, BsonArray initialData, UnifiedEntityMap entityMap)
+        private BsonDocument AddInitialData(IMongoClient client, BsonArray initialData)
         {
-            var mongoCollectionSettings = new MongoCollectionSettings();
-
-            var writeConcern = WriteConcern.WMajority;
-            if (DriverTestConfiguration.IsReplicaSet(client))
+            if (initialData == null)
             {
-                // Makes server to wait for ack from all data nodes to make sure the test data availability before running the test itself.
-                // It's limited to replica set only because there is no simple way to calculate proper w for sharded cluster.
-                var dataBearingServersCount = DriverTestConfiguration.GetReplicaSetNumberOfDataBearingMembers(client);
-                writeConcern = WriteConcern.Acknowledged.With(w: dataBearingServersCount, journal:true);
+                return null;
             }
 
-            BsonDocument serverTime = null;
+            BsonDocument lastKnownClusterTime = null;
             foreach (var dataItem in initialData)
             {
                 var collectionName = dataItem["collectionName"].AsString;
                 var databaseName = dataItem["databaseName"].AsString;
                 var documents = dataItem["documents"].AsBsonArray.Cast<BsonDocument>().ToList();
 
-                var database = client.GetDatabase(databaseName).WithWriteConcern(writeConcern);
-                var collection = database.GetCollection<BsonDocument>(collectionName, mongoCollectionSettings);
+                var database = client.GetDatabase(databaseName).WithWriteConcern(WriteConcern.WMajority);
+
+                var createCollectionOptions = new CreateCollectionOptions();
+                if (dataItem.AsBsonDocument.Contains("createOptions"))
+                {
+                    var options = dataItem.AsBsonDocument["createOptions"].AsBsonDocument;
+                    foreach (var option in options)
+                    {
+                        switch (option.Name)
+                        {
+                            case "encryptedFields":
+                                createCollectionOptions.EncryptedFields = option.Value.AsBsonDocument;
+                                break;
+                            default:
+                                throw new FormatException($"Invalid createOptions argument name: '{option.Name}'.");
+                        }
+                    }
+                }
 
                 _logger.LogDebug("Dropping {0}", collectionName);
-                var session = client.StartSession();
-                database.DropCollection(session, collectionName);
+                using var session = client.StartSession();
+
+                // For some QE spec tests we need to drop QE state collections (enxcol_.*.esc, enxcol_.*.ecoc).
+                // DropCollection with EncryptedFields automatically handles cleanup of those QE state collections
+                database.DropCollection(session, collectionName, new DropCollectionOptions { EncryptedFields = createCollectionOptions.EncryptedFields });
+
+                database.CreateCollection(session, collectionName, createCollectionOptions);
+
                 if (documents.Any())
                 {
+                    var collection = database.GetCollection<BsonDocument>(collectionName);
                     collection.InsertMany(session, documents);
                 }
-                else
-                {
-                    database.CreateCollection(session, collectionName);
-                }
 
-                serverTime = session.ClusterTime;
+                lastKnownClusterTime = session.ClusterTime;
             }
 
-            entityMap.AdjustSessionsClusterTime(serverTime);
+            return lastKnownClusterTime;
         }
 
         private void AssertEvents(BsonArray eventItems, UnifiedEntityMap entityMap)
@@ -263,7 +270,7 @@ namespace MongoDB.Driver.Tests.UnifiedTestOperations
             }
         }
 
-        private void CreateAndRunOperation(BsonDocument operationDocument, bool async, CancellationToken cancellationToken)
+        private OperationResult CreateAndRunOperation(BsonDocument operationDocument, bool async, CancellationToken cancellationToken)
         {
             var operation = CreateOperation(operationDocument, _entityMap);
 
@@ -274,20 +281,16 @@ namespace MongoDB.Driver.Tests.UnifiedTestOperations
                         ? entityOperation.ExecuteAsync(cancellationToken).GetAwaiter().GetResult()
                         : entityOperation.Execute(cancellationToken);
                     AssertResult(result, operationDocument, _entityMap);
-                    break;
+                    return result;
                 case IUnifiedSpecialTestOperation specialOperation:
                     specialOperation.Execute();
-                    break;
+                    return OperationResult.Empty();
                 case IUnifiedOperationWithCreateAndRunOperationCallback operationWithCreateAndRunCallback:
-                    if (async)
-                    {
-                        operationWithCreateAndRunCallback.ExecuteAsync(CreateAndRunOperation, cancellationToken).GetAwaiter().GetResult();
-                    }
-                    else
-                    {
-                        operationWithCreateAndRunCallback.Execute(CreateAndRunOperation, cancellationToken);
-                    }
-                    break;
+                    var innerResult = async
+                        ? operationWithCreateAndRunCallback.ExecuteAsync(CreateAndRunOperation, cancellationToken).GetAwaiter().GetResult()
+                        : operationWithCreateAndRunCallback.Execute(CreateAndRunOperation, cancellationToken);
+                    AssertResult(innerResult, operationDocument, _entityMap);
+                    return innerResult;
                 default:
                     throw new FormatException($"Unexpected operation type: '{operation.GetType()}'.");
             }
@@ -346,7 +349,7 @@ namespace MongoDB.Driver.Tests.UnifiedTestOperations
             {
                 if (actualResult.Result != null)
                 {
-                    entityMap.Resutls.Add(saveResultAsEntity.AsString, actualResult.Result);
+                    entityMap.Results.Add(saveResultAsEntity.AsString, actualResult.Result);
                 }
                 else if (actualResult.ChangeStream != null)
                 {
@@ -390,9 +393,7 @@ namespace MongoDB.Driver.Tests.UnifiedTestOperations
                 // SERVER-38335
                 serverVersion < new SemanticVersion(4, 1, 9) && ex.Code == (int)ServerErrorCode.Interrupted ||
                 // SERVER-54216
-                ex.Code == (int)ServerErrorCode.Unauthorized ||
-                // Serverless has a different code for Unauthorized error
-                ex.Code == (int)ServerErrorCode.UnauthorizedServerless)
+                ex.Code == (int)ServerErrorCode.Unauthorized)
             {
                 // ignore errors
             }

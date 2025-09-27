@@ -19,7 +19,6 @@ using System.Linq;
 using System.Threading.Tasks;
 using FluentAssertions;
 using MongoDB.Bson;
-using MongoDB.Driver;
 using MongoDB.Driver.Core.Clusters;
 using MongoDB.Driver.Core.Misc;
 using MongoDB.Driver.Core.TestHelpers.XunitExtensions;
@@ -79,6 +78,21 @@ namespace MongoDB.Driver.Tests.Linq.Linq3ImplementationWithLinq2Tests
         }
 
         [Fact]
+        public async Task ToAsyncEnumerable()
+        {
+            var query = CreateQuery().Select(x => x.A);
+            var expectedResults = query.ToList();
+
+            var asyncResults = new List<string>();
+            await foreach (var item in query.ToAsyncEnumerable())
+            {
+                asyncResults.Add(item);
+            }
+
+            asyncResults.Should().Equal(expectedResults);
+        }
+
+        [Fact]
         public void Average()
         {
             var result = CreateQuery().Select(x => x.C.E.F + 1).Average();
@@ -119,6 +133,106 @@ namespace MongoDB.Driver.Tests.Linq.Linq3ImplementationWithLinq2Tests
             var result = await CreateQuery().AverageAsync(x => x.C.E.F);
 
             result.Should().Be(61);
+        }
+
+        [Fact]
+        public void Average_on_empty_set()
+        {
+            Action action = () => CreateQuery().Where(x => x.A == "__dummy__").Select(x => x.W).Average();
+
+            action.ShouldThrow<InvalidOperationException>().WithMessage("Sequence contains no elements");
+        }
+
+        [Fact]
+        public void Average_on_empty_set_with_selector()
+        {
+            Action action = () => CreateQuery().Where(x => x.A == "__dummy__").Average(x => x.X);
+
+            action.ShouldThrow<InvalidOperationException>().WithMessage("Sequence contains no elements");
+        }
+
+        [Fact]
+        public void AverageAsync_on_empty_set()
+        {
+            var subject = CreateQuery().Where(x => x.A == "__dummy__").Select(x => x.Y).AverageAsync();
+
+            subject.Awaiting(async q => await q)
+                .ShouldThrow<InvalidOperationException>()
+                .WithMessage("Sequence contains no elements");
+        }
+
+        [Fact]
+        public void AverageAsync_on_empty_set_with_selector()
+        {
+            var subject = CreateQuery().Where(x => x.A == "__dummy__").AverageAsync(x => x.Z);
+
+            subject.Awaiting(async q => await q)
+                .ShouldThrow<InvalidOperationException>()
+                .WithMessage("Sequence contains no elements");
+        }
+
+        [Fact]
+        public void Average_on_nullable_empty_set()
+        {
+            var result = CreateQuery().Where(x => x.A == "__dummy__").Select(x => x.NullableW).Average();
+
+            result.Should().Be(null);
+        }
+
+        [Fact]
+        public void Average_on_nullable_empty_set_with_selector()
+        {
+            var result = CreateQuery().Where(x => x.A == "__dummy__").Average(x => x.NullableX);
+
+            result.Should().Be(null);
+        }
+
+        [Fact]
+        public async Task AverageAsync_on_nullable_empty_set()
+        {
+            var result = await CreateQuery().Where(x => x.A == "__dummy__").Select(x => x.NullableY).AverageAsync();
+
+            result.Should().Be(null);
+        }
+
+        [Fact]
+        public async Task AverageAsync_on_nullable_empty_set_with_selector()
+        {
+            var result = await CreateQuery().Where(x => x.A == "__dummy__").AverageAsync(x => x.NullableZ);
+
+            result.Should().Be(null);
+        }
+
+        [Fact]
+        public void Average_on_empty_set_cast_to_nullable()
+        {
+            var result = CreateQuery().Where(x => x.A == "__dummy__").Select(x => (double?)x.W).Average();
+
+            result.Should().Be(null);
+        }
+
+        [Fact]
+        public void Average_on_empty_set_cast_to_nullable_with_selector()
+        {
+            var result = CreateQuery().Where(x => x.A == "__dummy__").Average(x => (long?)x.X);
+
+            result.Should().Be(null);
+        }
+
+        [Fact]
+        public async Task AverageAsync_on_empty_set_cast_to_nullable()
+        {
+            var result = await CreateQuery().Where(x => x.A == "__dummy__").Select(x => (int?)x.Y).AverageAsync();
+
+            result.Should().Be(null);
+        }
+
+        [Fact]
+        public async Task AverageAsync_on_empty_set_cast_to_nullable_with_selector()
+        {
+            var result = await CreateQuery().Where(x => x.A == "__dummy__").AverageAsync(x => (decimal?)x.Z);
+
+            result.Should().Be(null);
         }
 
         [Fact]
@@ -411,8 +525,8 @@ namespace MongoDB.Driver.Tests.Linq.Linq3ImplementationWithLinq2Tests
 
             Assert(query,
                 2,
-                "{ $group: { _id: '$A', __agg0: { $first: '$$ROOT'} } }",
-                "{ $project: { Key: '$_id', FirstB: '$__agg0.B', _id: 0 } }");
+                "{ $group: { _id: '$A', __agg0: { $first: '$B'} } }",
+                "{ $project: { Key: '$_id', FirstB: '$__agg0', _id: 0 } }");
 
             query = CreateQuery()
                 .GroupBy(x => x.A)
@@ -434,8 +548,8 @@ namespace MongoDB.Driver.Tests.Linq.Linq3ImplementationWithLinq2Tests
 
             Assert(query,
                 2,
-                "{ $group: { _id: '$A', __agg0: { $first: '$$ROOT'} } }",
-                "{ $project: { Key: '$_id', FirstB: '$__agg0.B', _id: 0 } }");
+                "{ $group: { _id: '$A', __agg0: { $first: '$B'} } }",
+                "{ $project: { Key: '$_id', FirstB: '$__agg0', _id: 0 } }");
 
             query = from p in CreateQuery()
                         group p by p.A into g
@@ -484,9 +598,9 @@ namespace MongoDB.Driver.Tests.Linq.Linq3ImplementationWithLinq2Tests
 
             Assert(query,
                 1,
-                "{ $group: { _id: '$A', __agg0: { $first: '$$ROOT'} } }",
-                "{ $match: { '__agg0.B' : 'Balloon' } }",
-                "{ $project: { Key: '$_id', FirstB: '$__agg0.B', _id: 0 } }");
+                "{ $group: { _id: '$A', __agg0 : { $first : '$B' } } }",
+                "{ $match: { '__agg0' : 'Balloon' } }",
+                "{ $project: { Key: '$_id', FirstB: '$__agg0', _id: 0 } }");
 
             query = CreateQuery()
                 .GroupBy(x => x.A)
@@ -495,9 +609,9 @@ namespace MongoDB.Driver.Tests.Linq.Linq3ImplementationWithLinq2Tests
 
             Assert(query,
                 1,
-                "{ $group: { _id: '$A', __agg0: { $first: '$$ROOT'}, __agg1 : { $first : '$B' } } }",
-                "{ $match: { '__agg0.B' : 'Balloon' } }",
-                "{ $project: { Key: '$_id', FirstB: '$__agg1', _id: 0 } }");
+                "{ $group: { _id: '$A', __agg0 : { $first : '$B' } } }",
+                "{ $match: { '__agg0' : 'Balloon' } }",
+                "{ $project: { Key: '$_id', FirstB: '$__agg0', _id: 0 } }");
         }
 
 #if !MONO
@@ -511,9 +625,9 @@ namespace MongoDB.Driver.Tests.Linq.Linq3ImplementationWithLinq2Tests
 
             Assert(query,
                 1,
-                "{ $group: { _id: '$A', __agg0: { $first: '$$ROOT'} } }",
-                "{ $match: { '__agg0.B' : 'Balloon' } }",
-                "{ $project: { Key: '$_id', FirstB: '$__agg0.B', _id: 0 } }");
+                "{ $group: { _id: '$A', __agg0 : { $first : '$B' } } }",
+                "{ $match: { '__agg0' : 'Balloon' } }",
+                "{ $project: { Key: '$_id', FirstB: '$__agg0', _id: 0 } }");
         }
 #endif
 
@@ -525,8 +639,8 @@ namespace MongoDB.Driver.Tests.Linq.Linq3ImplementationWithLinq2Tests
 
             Assert(query,
                 2,
-                "{ $group: { _id : '$A', __agg0 : { $first: '$$ROOT'} } }",
-                "{ $project : { Key : '$_id', FirstB : '$__agg0.B', _id : 0 } }");
+                "{ $group: { _id : '$A', __agg0 : { $first: '$B'} } }",
+                "{ $project : { Key : '$_id', FirstB : '$__agg0', _id : 0 } }");
 
             query = CreateQuery()
                 .GroupBy(x => x.A, (k, s) => new { Key = k, FirstB = s.Select(x => x.B).First() });

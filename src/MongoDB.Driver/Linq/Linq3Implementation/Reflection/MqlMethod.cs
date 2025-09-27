@@ -25,6 +25,7 @@ namespace MongoDB.Driver.Linq.Linq3Implementation.Reflection
         // private static fields
         private static readonly MethodInfo __constantWithRepresentation;
         private static readonly MethodInfo __constantWithSerializer;
+        private static readonly MethodInfo __convert;
         private static readonly MethodInfo __dateFromString;
         private static readonly MethodInfo __dateFromStringWithFormat;
         private static readonly MethodInfo __dateFromStringWithFormatAndTimezone;
@@ -33,12 +34,14 @@ namespace MongoDB.Driver.Linq.Linq3Implementation.Reflection
         private static readonly MethodInfo __field;
         private static readonly MethodInfo __isMissing;
         private static readonly MethodInfo __isNullOrMissing;
+        private static readonly MethodInfo __sigmoid;
 
         // static constructor
         static MqlMethod()
         {
             __constantWithRepresentation = ReflectionInfo.Method((object value, BsonType representation) => Mql.Constant(value, representation));
             __constantWithSerializer = ReflectionInfo.Method((object value, IBsonSerializer<object> serializer) => Mql.Constant(value, serializer));
+            __convert = ReflectionInfo.Method((object value, ConvertOptions<object> options) => Mql.Convert(value, options));
             __dateFromString = ReflectionInfo.Method((string dateStringl) => Mql.DateFromString(dateStringl));
             __dateFromStringWithFormat = ReflectionInfo.Method((string dateString, string format) => Mql.DateFromString(dateString, format));
             __dateFromStringWithFormatAndTimezone = ReflectionInfo.Method((string dateString, string format, string timezone) => Mql.DateFromString(dateString, format, timezone));
@@ -47,11 +50,13 @@ namespace MongoDB.Driver.Linq.Linq3Implementation.Reflection
             __field = ReflectionInfo.Method((object container, string fieldName, IBsonSerializer<object> serializer) => Mql.Field<object, object>(container, fieldName, serializer));
             __isMissing = ReflectionInfo.Method((object field) => Mql.IsMissing(field));
             __isNullOrMissing = ReflectionInfo.Method((object field) => Mql.IsNullOrMissing(field));
+            __sigmoid = ReflectionInfo.Method((double value) => Mql.Sigmoid(value));
         }
 
         // public properties
         public static MethodInfo ConstantWithRepresentation => __constantWithRepresentation;
         public static MethodInfo ConstantWithSerializer => __constantWithSerializer;
+        public static MethodInfo Convert => __convert;
         public static MethodInfo DateFromString => __dateFromString;
         public static MethodInfo DateFromStringWithFormat => __dateFromStringWithFormat;
         public static MethodInfo DateFromStringWithFormatAndTimezone => __dateFromStringWithFormatAndTimezone;
@@ -60,5 +65,6 @@ namespace MongoDB.Driver.Linq.Linq3Implementation.Reflection
         public static MethodInfo Field => __field;
         public static MethodInfo IsMissing => __isMissing;
         public static MethodInfo IsNullOrMissing => __isNullOrMissing;
+        public static MethodInfo Sigmoid => __sigmoid;
     }
 }

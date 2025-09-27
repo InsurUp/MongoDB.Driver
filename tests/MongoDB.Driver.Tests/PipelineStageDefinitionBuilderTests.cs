@@ -21,11 +21,13 @@ using MongoDB.Bson.Serialization;
 using MongoDB.Bson.Serialization.Attributes;
 using MongoDB.Bson.Serialization.Serializers;
 using MongoDB.Driver.Core.TestHelpers.XunitExtensions;
+using MongoDB.Driver.GeoJsonObjectModel;
 using Moq;
 using Xunit;
 
 namespace MongoDB.Driver.Tests
 {
+    [Trait("Category", "Integration")]
     public class PipelineStageDefinitionBuilderTests
     {
         // public methods
@@ -131,6 +133,91 @@ namespace MongoDB.Driver.Tests
 
             var stage = RenderStage(result);
             stage.Document.Should().Be("{ $changeStreamSplitLargeEvent : { } }");
+        }
+
+        [Fact]
+        public void GeoNear_with_array_should_return_the_expected_result()
+        {
+            var result = PipelineStageDefinitionBuilder.GeoNear(
+                [34.0, 67.0],
+                new GeoNearOptions<BsonDocument, BsonDocument>
+                {
+                    DistanceField = "calculatedDistance",
+                    MaxDistance = 3,
+                    IncludeLocs = "usedLocation",
+                    Spherical = true,
+                    Query = new BsonDocument("testfield", "testvalue")
+                });
+
+            var stage = RenderStage(result);
+            stage.Document.Should().Be("""
+                                       {
+                                        "$geoNear" : {
+                                                "near" : [34.0, 67.0],
+                                                "distanceField" : "calculatedDistance",
+                                                "maxDistance" : 3.0,
+                                                "query" : { "testfield" : "testvalue" },
+                                                "includeLocs" : "usedLocation",
+                                                "spherical" : true
+                                            }
+                                       }
+                                       """);
+        }
+
+        [Fact]
+        public void GeoNear_with_geojson_point_should_return_the_expected_result()
+        {
+            var result = PipelineStageDefinitionBuilder.GeoNear(
+                GeoJson.Point(GeoJson.Geographic(34, 67)),
+                new GeoNearOptions<BsonDocument, BsonDocument>
+                {
+                    DistanceField = "calculatedDistance",
+                    MaxDistance = 3,
+                    IncludeLocs = "usedLocation",
+                    Spherical = true,
+                    Query = new BsonDocument("testfield", "testvalue")
+                });
+
+            var stage = RenderStage(result);
+            stage.Document.Should().Be("""
+                                       {
+                                        "$geoNear" : {
+                                                "near" : { "type" : "Point", "coordinates" : [34.0, 67.0] },
+                                                "distanceField" : "calculatedDistance",
+                                                "maxDistance" : 3.0,
+                                                "query" : { "testfield" : "testvalue" },
+                                                "includeLocs" : "usedLocation",
+                                                "spherical" : true
+                                            }
+                                       }
+                                       """);
+        }
+
+        [Fact]
+        public void GeoNear_with_no_options_should_return_the_expected_result()
+        {
+            var result =
+                PipelineStageDefinitionBuilder.GeoNear<BsonDocument, GeoJson2DGeographicCoordinates, BsonDocument>(
+                GeoJson.Point(GeoJson.Geographic(34, 67)));
+
+            var stage = RenderStage(result);
+            stage.Document.Should().Be("""{ "$geoNear" : { "near" : { "type" : "Point", "coordinates" : [34.0, 67.0] } } }""");
+        }
+
+        [Fact]
+        public void GeoNear_with_wrong_legacy_coordinates_should_throw_exception()
+        {
+            Assert.Throws<ArgumentException>(() =>
+            {
+                var result =
+                    PipelineStageDefinitionBuilder.GeoNear<BsonDocument, BsonDocument>([34.0, 67.0, 23.0, 34.5]);
+            });
+
+            Assert.Throws<ArgumentException>(() =>
+            {
+                var result =
+                    PipelineStageDefinitionBuilder.GeoNear<BsonDocument, BsonDocument>([34.0]);
+            });
         }
 
         [Fact]
@@ -524,6 +611,45 @@ namespace MongoDB.Driver.Tests
                     new EmptyPipelineDefinition<BsonDocument>(),
                     (StringFieldDefinition<BsonDocument, IEnumerable<BsonDocument>>)null
                 );
+            });
+        }
+
+        [Fact]
+        public void RankFusion_with_incorrect_params_should_throw_expected_exception()
+        {
+            Assert.Throws<ArgumentNullException>(() =>
+            {
+                PipelineStageDefinitionBuilder.RankFusion((Dictionary<string, PipelineDefinition<BsonDocument, BsonDocument>>)null);
+            });
+
+            Assert.Throws<ArgumentNullException>(() =>
+            {
+                PipelineStageDefinitionBuilder.RankFusion((PipelineDefinition<BsonDocument, BsonDocument>[])null);
+            });
+
+            Assert.Throws<ArgumentNullException>(() =>
+            {
+                PipelineStageDefinitionBuilder.RankFusion(((PipelineDefinition<BsonDocument, BsonDocument>, double?)[])null);
+            });
+
+            Assert.Throws<ArgumentNullException>(() =>
+            {
+                PipelineStageDefinitionBuilder.RankFusion(
+                    new Dictionary<string, PipelineDefinition<BsonDocument, BsonDocument>>
+                    {
+                        { "p1", null }
+                    });
+            });
+
+            Assert.Throws<ArgumentNullException>(() =>
+            {
+                PipelineStageDefinitionBuilder.RankFusion(new PipelineDefinition<BsonDocument, BsonDocument>[]{null});
+            });
+
+            Assert.Throws<ArgumentNullException>(() =>
+            {
+                PipelineStageDefinitionBuilder.RankFusion(
+                    new (PipelineDefinition<BsonDocument, BsonDocument>, double?)[] { (null, 1.0) });
             });
         }
 
