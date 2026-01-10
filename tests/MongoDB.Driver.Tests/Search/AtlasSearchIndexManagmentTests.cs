@@ -36,8 +36,15 @@ namespace MongoDB.Driver.Tests.Search
         private readonly IMongoCollection<BsonDocument> _collection;
         private readonly IMongoDatabase _database;
         private readonly IMongoClient _mongoClient;
-        private readonly BsonDocument _indexDefinition = BsonDocument.Parse("{ mappings: { dynamic: false } }");
-        private readonly BsonDocument _vectorIndexDefinition = BsonDocument.Parse("{ fields: [ { type: 'vector', path: 'plot_embedding', numDimensions: 1536, similarity: 'euclidean' } ] }");
+
+        private readonly BsonDocument _indexDefinition
+            = BsonDocument.Parse("{ mappings: { dynamic: true, fields: { } } }");
+
+        private readonly BsonDocument _indexDefinitionWithFields
+            = BsonDocument.Parse("{ mappings: { dynamic: false, fields: { 'name': { type: 'string', indexOptions: 'offsets', store : true, norms : 'include' } } } }");
+
+        private readonly BsonDocument _vectorIndexDefinition
+            = BsonDocument.Parse("{ fields: [ { type: 'vector', path: 'plot_embedding', numDimensions: 1536, similarity: 'euclidean' } ] }");
 
         public AtlasSearchIndexManagementTests(ITestOutputHelper testOutputHelper) : base(testOutputHelper)
         {
@@ -68,10 +75,18 @@ namespace MongoDB.Driver.Tests.Search
         [Theory(Timeout = Timeout)]
         [ParameterAttributeData]
         public async Task Case2_driver_should_successfully_create_multiple_indexes_in_batch(
-            [Values(false, true)] bool async)
+            [Values(false, true)] bool async,
+            [Values(false, true)] bool includeFields)
         {
-            var indexDefinition1 = new CreateSearchIndexModel(async ? "test-search-index-1-async" : "test-search-index-1", _indexDefinition);
-            var indexDefinition2 = new CreateSearchIndexModel(async ? "test-search-index-2-async" : "test-search-index-2", _indexDefinition);
+            var indexDefinitionBson = includeFields ? _indexDefinitionWithFields : _indexDefinition;
+
+            var indexDefinition1 = new CreateSearchIndexModel(
+                CreateIndexName("test-search-index-1", async, includeFields),
+                indexDefinitionBson);
+
+            var indexDefinition2 = new CreateSearchIndexModel(
+                CreateIndexName("test-search-index-2", async, includeFields),
+                indexDefinitionBson);
 
             var indexNamesActual = async
                 ? await _collection.SearchIndexes.CreateManyAsync(new[] { indexDefinition1, indexDefinition2 })
@@ -81,8 +96,8 @@ namespace MongoDB.Driver.Tests.Search
 
             var indexes = await GetIndexes(async, indexDefinition1.Name, indexDefinition2.Name);
 
-            indexes[0]["latestDefinition"].AsBsonDocument.Should().Be(_indexDefinition);
-            indexes[1]["latestDefinition"].AsBsonDocument.Should().Be(_indexDefinition);
+            indexes[0]["latestDefinition"].AsBsonDocument.Should().Be(indexDefinitionBson);
+            indexes[1]["latestDefinition"].AsBsonDocument.Should().Be(indexDefinitionBson);
         }
 
         [Theory(Timeout = Timeout)]
@@ -130,7 +145,7 @@ namespace MongoDB.Driver.Tests.Search
             [Values(false, true)] bool async)
         {
             var indexName = async ? "test-search-index-async" : "test-search-index";
-            var indexNewDefinition = BsonDocument.Parse("{ mappings: { dynamic: true }}");
+            var indexNewDefinition = BsonDocument.Parse("{ mappings: { dynamic: true, fields: { } }}");
 
             await CreateIndexAndValidate(indexName, _indexDefinition, async);
             if (async)
@@ -166,22 +181,24 @@ namespace MongoDB.Driver.Tests.Search
         [Theory(Timeout = Timeout)]
         [ParameterAttributeData]
         public async Task Case6_driver_can_create_and_list_search_indexes_with_non_default_read_write_concern(
-            [Values(false, true)] bool async)
+            [Values(false, true)] bool async,
+            [Values(false, true)] bool includeFields)
         {
-            var indexName = async ? "test-search-index-case6-async" : "test-search-index-case6";
+            var indexName = CreateIndexName("test-search-index-case6", async, includeFields);
+            var indexDefinitionBson = includeFields ? _indexDefinitionWithFields : _indexDefinition;
 
             var collection = _collection
                 .WithReadConcern(ReadConcern.Majority)
                 .WithWriteConcern(WriteConcern.WMajority);
 
             var indexNameCreated = async
-                ? await collection.SearchIndexes.CreateOneAsync(_indexDefinition, indexName)
-                : collection.SearchIndexes.CreateOne(_indexDefinition, indexName);
+                ? await collection.SearchIndexes.CreateOneAsync(indexDefinitionBson, indexName)
+                : collection.SearchIndexes.CreateOne(indexDefinitionBson, indexName);
 
             indexNameCreated.Should().Be(indexName);
 
             var indexes = await GetIndexes(async, indexName);
-            indexes[0]["latestDefinition"].AsBsonDocument.Should().Be(_indexDefinition);
+            indexes[0]["latestDefinition"].AsBsonDocument.Should().Be(indexDefinitionBson);
         }
 
         [Theory(Timeout = Timeout)]
@@ -231,10 +248,197 @@ namespace MongoDB.Driver.Tests.Search
             var indexName = async ? "test-search-index-case8-error-async" : "test-search-index-case8-error";
 
             var exception = async
-                ? await Record.ExceptionAsync(() => _collection.SearchIndexes.CreateOneAsync(_vectorIndexDefinition, indexName))
-                : Record.Exception(() => _collection.SearchIndexes.CreateOne(_vectorIndexDefinition, indexName));
+                ? await Record.ExceptionAsync(() => _collection.SearchIndexes.CreateOneAsync(
+                    new CreateSearchIndexModel(indexName, _vectorIndexDefinition).Definition, indexName))
+                : Record.Exception(() => _collection.SearchIndexes.CreateOne(
+                    new CreateSearchIndexModel(indexName, _vectorIndexDefinition).Definition, indexName));
 
-            exception.Message.Should().Contain("Attribute mappings missing");
+            exception.Message.Should().Contain("Command createSearchIndexes failed");
+        }
+
+        [Theory(Timeout = Timeout)]
+        [ParameterAttributeData]
+        public async Task Can_create_Atlas_vector_index_for_all_options_using_typed_API(
+            [Values(false, true)] bool async)
+        {
+            var indexName = async ? "test-index-vector-optional-async" : "test-index-vector-optional";
+
+            var indexModel = new CreateVectorSearchIndexModel<EntityWithVector>(
+                e => e.Floats, indexName, VectorSimilarity.Cosine, dimensions: 2)
+            {
+                HnswMaxEdges = 18, HnswNumEdgeCandidates = 102, Quantization = VectorQuantization.Scalar
+            };
+
+            var collection = _database.GetCollection<EntityWithVector>(_collection.CollectionNamespace.CollectionName);
+            var createdName = async
+                ? await collection.SearchIndexes.CreateOneAsync(indexModel)
+                : collection.SearchIndexes.CreateOne(indexModel);
+
+            createdName.Should().Be(indexName);
+
+            var index = (await GetIndexes(async, indexName))[0];
+            index["type"].AsString.Should().Be("vectorSearch");
+
+            var fields = index["latestDefinition"].AsBsonDocument["fields"].AsBsonArray;
+            fields.Count.Should().Be(1);
+
+            var indexField = fields[0].AsBsonDocument;
+            indexField["type"].AsString.Should().Be("vector");
+            indexField["path"].AsString.Should().Be("Floats");
+            indexField["numDimensions"].AsInt32.Should().Be(2);
+            indexField["similarity"].AsString.Should().Be("cosine");
+            indexField["quantization"].AsString.Should().Be("scalar");
+            indexField["hnswOptions"].AsBsonDocument["maxEdges"].AsInt32.Should().Be(18);
+            indexField["hnswOptions"].AsBsonDocument["numEdgeCandidates"].AsInt32.Should().Be(102);
+        }
+
+        [Theory(Timeout = Timeout)]
+        [ParameterAttributeData]
+        public async Task Can_create_Atlas_vector_index_for_required_only_options_using_typed_API(
+            [Values(false, true)] bool async)
+        {
+            var indexName = async ? "test-index-vector-required-async" : "test-index-vector-required";
+
+            var indexModel = new CreateVectorSearchIndexModel<EntityWithVector>("vectors", indexName, VectorSimilarity.Euclidean, dimensions: 4);
+
+            var collection = _database.GetCollection<EntityWithVector>(_collection.CollectionNamespace.CollectionName);
+            var createdName = async
+                ? await collection.SearchIndexes.CreateOneAsync(indexModel)
+                : collection.SearchIndexes.CreateOne(indexModel);
+
+            createdName.Should().Be(indexName);
+
+            var index = (await GetIndexes(async, indexName))[0];
+            index["type"].AsString.Should().Be("vectorSearch");
+
+            var fields = index["latestDefinition"].AsBsonDocument["fields"].AsBsonArray;
+            fields.Count.Should().Be(1);
+
+            var indexField = fields[0].AsBsonDocument;
+            indexField["type"].AsString.Should().Be("vector");
+            indexField["path"].AsString.Should().Be("vectors");
+            indexField["numDimensions"].AsInt32.Should().Be(4);
+            indexField["similarity"].AsString.Should().Be("euclidean");
+
+            indexField.Contains("quantization").Should().Be(false);
+            indexField.Contains("hnswOptions").Should().Be(false);
+        }
+
+        [Theory(Timeout = Timeout)]
+        [ParameterAttributeData]
+        public async Task Can_create_Atlas_vector_index_for_all_options_using_typed_API_with_filters(
+            [Values(false, true)] bool async)
+        {
+            var indexName = async ? "test-index-vector-typed-filters-async" : "test-index-typed-filters";
+
+            var indexModel = new CreateVectorSearchIndexModel<EntityWithVector>(
+                e => e.Floats,
+                indexName,
+                VectorSimilarity.Cosine,
+                dimensions: 2,
+                e => e.Filter1, e => e.Filter2, e => e.Filter3)
+            {
+                HnswMaxEdges = 18,
+                HnswNumEdgeCandidates = 102,
+                Quantization = VectorQuantization.Scalar,
+            };
+
+            var collection = _database.GetCollection<EntityWithVector>(_collection.CollectionNamespace.CollectionName);
+            var createdName = async
+                ? await collection.SearchIndexes.CreateOneAsync(indexModel)
+                : collection.SearchIndexes.CreateOne(indexModel);
+
+            createdName.Should().Be(indexName);
+
+            var index = (await GetIndexes(async, indexName))[0];
+            index["type"].AsString.Should().Be("vectorSearch");
+
+            var fields = index["latestDefinition"].AsBsonDocument["fields"].AsBsonArray;
+            fields.Count.Should().Be(4);
+
+            var indexField = fields[0].AsBsonDocument;
+            indexField["type"].AsString.Should().Be("vector");
+            indexField["path"].AsString.Should().Be("Floats");
+            indexField["numDimensions"].AsInt32.Should().Be(2);
+            indexField["similarity"].AsString.Should().Be("cosine");
+            indexField["quantization"].AsString.Should().Be("scalar");
+            indexField["hnswOptions"].AsBsonDocument["maxEdges"].AsInt32.Should().Be(18);
+            indexField["hnswOptions"].AsBsonDocument["numEdgeCandidates"].AsInt32.Should().Be(102);
+
+            for (var i = 1; i <= 3; i++)
+            {
+                var filterField = fields[i].AsBsonDocument;
+                filterField["type"].AsString.Should().Be("filter");
+                filterField["path"].AsString.Should().Be($"Filter{i}");
+            }
+        }
+
+        [Theory(Timeout = Timeout)]
+        [ParameterAttributeData]
+        public async Task Can_create_Atlas_vector_index_for_required_only_options_using_typed_API_with_filters(
+            [Values(false, true)] bool async)
+        {
+            var indexName = async ? "test-index-untyped-filters-async" : "test-index-untyped-filters";
+
+            var indexModel = new CreateVectorSearchIndexModel<EntityWithVector>(
+                "vectors",
+                indexName,
+                VectorSimilarity.Euclidean,
+                dimensions: 4,
+                "f1", "f2", "f3");
+
+            var collection = _database.GetCollection<EntityWithVector>(_collection.CollectionNamespace.CollectionName);
+            var createdName = async
+                ? await collection.SearchIndexes.CreateOneAsync(indexModel)
+                : collection.SearchIndexes.CreateOne(indexModel);
+
+            createdName.Should().Be(indexName);
+
+            var index = (await GetIndexes(async, indexName))[0];
+            index["type"].AsString.Should().Be("vectorSearch");
+
+            var fields = index["latestDefinition"].AsBsonDocument["fields"].AsBsonArray;
+            fields.Count.Should().Be(4);
+
+            var indexField = fields[0].AsBsonDocument;
+            indexField["type"].AsString.Should().Be("vector");
+            indexField["path"].AsString.Should().Be("vectors");
+            indexField["numDimensions"].AsInt32.Should().Be(4);
+            indexField["similarity"].AsString.Should().Be("euclidean");
+
+            indexField.Contains("quantization").Should().Be(false);
+            indexField.Contains("hnswOptions").Should().Be(false);
+
+            for (var i = 1; i <= 3; i++)
+            {
+                var filterField = fields[i].AsBsonDocument;
+                filterField["type"].AsString.Should().Be("filter");
+                filterField["path"].AsString.Should().Be($"f{i}");
+            }
+        }
+
+        private class EntityWithVector
+        {
+            public ObjectId Id { get; set; }
+            public float[] Floats { get; set; }
+            public bool Filter1 { get; set; }
+            public string Filter2 { get; set; }
+            public int Filter3 { get; set; }
+        }
+
+        private static string CreateIndexName(string baseName, bool async, bool includeFields)
+        {
+            if (async)
+            {
+                baseName += "-async";
+            }
+
+            if (includeFields)
+            {
+                baseName += "-fields";
+            }
+
+            return baseName;
         }
 
         private async Task<BsonDocument> CreateIndexAndValidate(string indexName, BsonDocument indexDefinition, bool async)

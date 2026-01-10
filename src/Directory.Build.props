@@ -10,6 +10,11 @@
     <CodeAnalysisRuleSet>..\..\MongoDB.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
 
+  <PropertyGroup Condition=" '$(Configuration)' == 'Release_CSharp_14' ">
+    <!--Do not update LangVersion to 14 in Driver-->
+    <Optimize Condition=" '$(Optimize)' == '' ">true</Optimize>
+  </PropertyGroup>
+
   <PropertyGroup>
     <Company>InsurUp</Company>
     <Copyright>Original work Copyright © 2010-present MongoDB Inc. Modified work Copyright © 2024 InsurUp</Copyright>
