@@ -17,12 +17,11 @@ using System;
 using System.Linq;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
+using MongoDB.Bson.Serialization.Serializers;
 using MongoDB.Driver.Core.Misc;
 using MongoDB.Driver.Linq.Linq3Implementation;
-using MongoDB.Driver.Linq.Linq3Implementation.Ast.Optimizers;
 using MongoDB.Driver.Linq.Linq3Implementation.Misc;
-using MongoDB.Driver.Linq.Linq3Implementation.Translators;
-using MongoDB.Driver.Linq.Linq3Implementation.Translators.ExpressionToPipelineTranslators;
+using MongoDB.Driver.Linq.Linq3Implementation.Translators.ExpressionToExecutableQueryTranslators;
 
 namespace MongoDB.Driver.Linq
 {
@@ -38,62 +37,87 @@ namespace MongoDB.Driver.Linq
         /// <remarks>
         /// This lets a query be expressed in LINQ — where features such as query filters and joins
         /// are applied automatically — and then handed to APIs that accept only an
-        /// <see cref="IAggregateFluent{TResult}"/>. The pipeline is translated and optimized exactly
-        /// as it would be when the query is executed, so both forms send the same stages to the server.
-        /// The query is not executed by this method.
+        /// <see cref="IAggregateFluent{TResult}"/>. The query is translated through the driver's own
+        /// translation path, the same one executing it would take, so both forms send identical
+        /// stages to the server. The query is not executed by this method.
         /// </remarks>
-        /// <typeparam name="TSource">The type of the documents in the source collection.</typeparam>
+        /// <typeparam name="TDocument">The type of the documents in the source collection.</typeparam>
         /// <typeparam name="TResult">The type of the documents produced by the query.</typeparam>
         /// <param name="source">The LINQ query. It must be a MongoDB queryable built against a collection.</param>
         /// <returns>An aggregate fluent whose pipeline is the translation of the query.</returns>
         /// <exception cref="ArgumentException">
-        /// The source is not a MongoDB queryable, or it was not built against a collection.
+        /// The source is not a MongoDB queryable over <typeparamref name="TDocument"/>, or it was
+        /// built against a database rather than a collection.
         /// </exception>
-        public static IAggregateFluent<TResult> ToAggregateFluent<TSource, TResult>(this IQueryable<TResult> source)
+        public static IAggregateFluent<TResult> ToAggregateFluent<TDocument, TResult>(this IQueryable<TResult> source)
         {
             Ensure.IsNotNull(source, nameof(source));
 
-            if (source.Provider is not MongoQueryProvider<TSource> provider)
+            if (source.Provider is not MongoQueryProvider<TDocument> provider)
             {
+                var actual = source.Provider is MongoQueryProvider
+                    ? "a MongoDB IQueryable over a different document type"
+                    : "not a MongoDB IQueryable";
+
                 throw new ArgumentException(
-                    $"The source argument must be a MongoDB IQueryable against a collection of {typeof(TSource).Name}.",
+                    $"The source argument must be a MongoDB IQueryable over {typeof(TDocument)}, but it is {actual}. " +
+                    $"The first type argument must be the document type of the collection the query was built from.",
                     nameof(source));
             }
 
             if (provider.Collection == null)
             {
                 throw new ArgumentException(
-                    "The source argument must be a MongoDB IQueryable against a collection.",
+                    "The source argument must be a MongoDB IQueryable against a collection, not a database.",
                     nameof(source));
             }
 
-            var (stages, outputSerializer) = TranslateToStages<TSource, TResult>(provider, source);
+            // Reuse the driver's own translation entry point rather than re-deriving the
+            // preprocess/translate/optimize sequence, so these stages cannot drift from the ones
+            // executing the query would send.
+            var executableQuery = ExpressionToExecutableQueryTranslator.Translate<TDocument, TResult>(
+                provider,
+                source.Expression,
+                provider.GetTranslationOptions());
 
-            PipelineDefinition<TSource, TResult> pipeline = new BsonDocumentStagePipelineDefinition<TSource, TResult>(
+            var translatedPipeline = executableQuery.Pipeline;
+            var stages = translatedPipeline.Ast.Render().AsBsonArray.Cast<BsonDocument>().ToArray();
+
+            PipelineDefinition<TDocument, TResult> pipeline = new BsonDocumentStagePipelineDefinition<TDocument, TResult>(
                 stages,
-                outputSerializer as IBsonSerializer<TResult>);
+                AdaptOutputSerializer<TResult>(translatedPipeline.OutputSerializer));
 
-            return new CollectionAggregateFluent<TSource, TResult>(
+            return new CollectionAggregateFluent<TDocument, TResult>(
                 provider.Session,
                 provider.Collection,
                 pipeline,
                 provider.Options ?? new AggregateOptions());
         }
 
-        private static (BsonDocument[] Stages, IBsonSerializer OutputSerializer) TranslateToStages<TSource, TResult>(
-            MongoQueryProvider<TSource> provider,
-            IQueryable<TResult> source)
+        // Mirrors ExecutableQuery.GetOutputSerializer. The translator's serializer describes the
+        // shape the rendered stages actually produce, so letting it fall back to the registry
+        // default would read results back from the wrong elements.
+        private static IBsonSerializer<TResult> AdaptOutputSerializer<TResult>(IBsonSerializer outputSerializer)
         {
-            var translationOptions = provider.GetTranslationOptions();
-            var expression = LinqExpressionPreprocessor.Preprocess(source.Expression);
+            var outputType = outputSerializer.ValueType;
 
-            var context = TranslationContext.Create(translationOptions);
-            var translatedPipeline = ExpressionToPipelineTranslator.Translate(context, expression);
-            var optimizedAst = AstPipelineOptimizer.Optimize(translatedPipeline.Ast);
+            if (outputType == typeof(TResult))
+            {
+                return (IBsonSerializer<TResult>)outputSerializer;
+            }
 
-            var stages = optimizedAst.Render().AsBsonArray.Cast<BsonDocument>().ToArray();
+            if (!typeof(TResult).IsAssignableFrom(outputType))
+            {
+                throw new NotSupportedException(
+                    $"The type of the pipeline output is {outputType} which is not assignable to {typeof(TResult)}.");
+            }
 
-            return (stages, translatedPipeline.OutputSerializer);
+            if (typeof(TResult).IsNullableOf(outputType))
+            {
+                return (IBsonSerializer<TResult>)NullableSerializer.Create(outputSerializer);
+            }
+
+            return (IBsonSerializer<TResult>)DowncastingSerializer.Create(typeof(TResult), outputType, outputSerializer);
         }
     }
 }
